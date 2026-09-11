@@ -1,0 +1,1966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Model your cap table, dilution, exit waterfall, IRR/MOIC and India stage-wise valuation benchmarks — free, in the browser.">
+<meta property="og:title" content="Ledgerline — cap table &amp; dilution intelligence">
+<meta property="og:description" content="Cap table modelling, exit waterfalls, investor IRR/MOIC and India sector-by-stage valuation benchmarks. Built for founders.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#1c5cab">
+<title>Ledgerline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&family=Schibsted+Grotesk:wght@400..700&family=Spline+Sans+Mono:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --plane: #f6f6f2;
+    --surface: #fcfcfb;
+    --surface-2: #f1f0eb;
+    --ink: #131311;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --accent: #1c5cab;
+    --accent-soft: rgba(28,92,171,0.08);
+    --accent-ink: #ffffff;
+    --good: #006300;
+    --bad: #d03b3b;
+    --warn-soft: rgba(208,59,59,0.08);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+    --shadow: 0 1px 2px rgba(11,11,11,0.05), 0 4px 16px rgba(11,11,11,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-2: #232322;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --accent: #5598e7;
+      --accent-soft: rgba(85,152,231,0.14);
+      --accent-ink: #0d0d0d;
+      --good: #0ca30c;
+      --bad: #e66767;
+      --warn-soft: rgba(230,103,103,0.12);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --accent: #5598e7;
+    --accent-soft: rgba(85,152,231,0.14);
+    --accent-ink: #0d0d0d;
+    --good: #0ca30c;
+    --bad: #e66767;
+    --warn-soft: rgba(230,103,103,0.12);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    font-family: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .serif { font-family: "Newsreader", Georgia, "Times New Roman", serif; }
+  .mono { font-family: "Spline Sans Mono", ui-monospace, "Cascadia Mono", Consolas, monospace; }
+
+  #root { min-height: 100vh; }
+  .shell { max-width: 1120px; margin: 0 auto; padding: 0 24px 80px; }
+
+  .masthead {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    padding: 22px 0 14px; border-bottom: 2px solid var(--ink);
+    flex-wrap: wrap;
+  }
+  .wordmark {
+    font-family: "Newsreader", Georgia, serif;
+    font-optical-sizing: auto;
+    font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin: 0;
+  }
+  .wordmark em { font-style: italic; font-weight: 500; color: var(--accent); }
+  .mast-actions { display: flex; gap: 8px; align-items: center; }
+  .tagline { color: var(--ink-2); font-size: 13px; }
+
+  .stat-strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    border-bottom: 1px solid var(--border);
+  }
+  .stat { padding: 14px 16px 12px; border-right: 1px solid var(--border); }
+  .stat:first-child { padding-left: 0; }
+  .stat:last-child { border-right: none; }
+  .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .stat .val { font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 19px; font-weight: 600; margin-top: 2px; }
+  .stat .sub { font-size: 12px; color: var(--ink-2); }
+
+  .tabs { display: flex; gap: 2px; margin: 18px 0 22px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab {
+    background: none; border: none; cursor: pointer; color: var(--ink-2);
+    font: inherit; font-weight: 500; padding: 9px 14px; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+
+  h2.section {
+    font-family: "Newsreader", Georgia, serif; font-weight: 600; font-size: 24px;
+    letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance;
+  }
+  .section-note { color: var(--ink-2); font-size: 13px; margin: 0 0 18px; max-width: 65ch; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px; box-shadow: var(--shadow);
+  }
+  .panel + .panel, .panel + .grid2, .grid2 + .panel { margin-top: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+  .panel .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+
+  .twrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--baseline);
+    white-space: nowrap;
+  }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: "Spline Sans Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  th.num { font-family: inherit; }
+  tr.total td { border-top: 1.5px solid var(--baseline); font-weight: 600; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: 0; }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 99px;
+    background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+  .pill.bad { background: var(--warn-soft); color: var(--bad); border-color: transparent; font-weight: 600; }
+
+  input, select {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--baseline); border-radius: 5px; padding: 5px 8px;
+  }
+  input[type="number"], input.num { font-family: "Spline Sans Mono", ui-monospace, monospace; text-align: right; }
+  input:disabled { color: var(--muted); }
+  label.f { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 3px; }
+  .frow { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .frow > div { display: flex; flex-direction: column; }
+
+  button.btn {
+    font: inherit; font-weight: 600; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--baseline); background: var(--surface); color: var(--ink);
+    padding: 6px 14px;
+  }
+  button.btn:hover { background: var(--surface-2); }
+  button.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.btn.primary:hover { filter: brightness(1.08); }
+  button.btn.sm { padding: 3px 9px; font-size: 12px; font-weight: 500; }
+  button.btn.danger { color: var(--bad); }
+
+  .chart-title { font-size: 13px; font-weight: 700; margin: 0 0 2px; }
+  .chart-sub { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 10px; }
+  .legend span.item { display: inline-flex; align-items: center; }
+  svg text { font-family: "Schibsted Grotesk", system-ui, sans-serif; }
+  svg .axis-t { font-size: 11px; fill: var(--muted); }
+  svg .val-t { font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 11px; fill: var(--ink-2); }
+
+  .tooltip {
+    position: fixed; z-index: 50; pointer-events: none;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--baseline);
+    border-radius: 6px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+    max-width: 260px;
+  }
+  .tooltip .tt-title { font-weight: 700; margin-bottom: 3px; }
+  .tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+  .tooltip .tt-row b { font-family: "Spline Sans Mono", ui-monospace, monospace; font-weight: 600; }
+
+  .exit-slider { display: flex; align-items: center; gap: 14px; margin: 6px 0 4px; }
+  .exit-slider input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .exit-readout { font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 22px; font-weight: 600; min-width: 120px; text-align: right; }
+
+  .delta-up { color: var(--good); }
+  .delta-down { color: var(--bad); }
+  .footnote { color: var(--muted); font-size: 12px; margin-top: 14px; max-width: 78ch; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: var(--plane); padding: 9px 18px; border-radius: 8px;
+    font-size: 13px; z-index: 60; box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  }
+  .example-flag { background: var(--accent-soft); color: var(--accent); border-radius: 6px; padding: 8px 12px; font-size: 12.5px; margin: 14px 0 0; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;}
+
+  /* ---------- setup wizard ---------- */
+  .wizard { max-width: 640px; margin: 40px auto 0; }
+  .wizard .panel { padding: 26px; }
+  .wizard h2 { font-family: "Newsreader", Georgia, serif; font-weight: 600; font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+  .wizard .lede { color: var(--ink-2); font-size: 13.5px; margin: 0 0 20px; max-width: 55ch; }
+  .wizard-steps { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+  .wizard-steps .dot {
+    width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; border: 1.5px solid var(--baseline); color: var(--muted);
+    font-family: "Spline Sans Mono", ui-monospace, monospace;
+  }
+  .wizard-steps .dot.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .wizard-steps .dot.done { border-color: var(--accent); color: var(--accent); }
+  .wizard-steps .bar { flex: 1; height: 1.5px; background: var(--grid); }
+  .wizard-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; gap: 10px; }
+  .wizard .ghost-link { background: none; border: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-decoration: underline; padding: 0; }
+  .wizard .ghost-link:hover { color: var(--ink-2); }
+  .thresh { font-size: 12px; color: var(--ink-2); }
+  td.below-block { color: var(--bad); font-weight: 700; }
+  tr.cur-stage td { background: var(--accent-soft); }
+  td.below-control { color: var(--s2); font-weight: 600; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab, button.btn { transition: background 0.12s ease, color 0.12s ease; }
+  }
+</style>
+
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ================================================================
+   SEED — mirrors the user's Sample Cap Table.xlsx (INR Cr).
+   Founders 1–3 + Angels 1–3 at founding; Seed ₹8 Cr @ ₹15 Cr pre;
+   Series A ₹24 Cr @ ₹37.2 Cr pre with 10% post-round ESOP;
+   Series B ₹50 Cr @ ₹200 Cr pre; Series C ₹100 Cr @ ₹450 Cr pre
+   where Investor 4 also buys out Investors 1–3 (secondary at pre-money).
+================================================================ */
+const SEED = {
+  isExample: true,
+  company: { name: "Sample Co", sector: "SaaS (India → global)", stage: "Series C+", currency: "₹", unit: "cr", revenue: 75, ebitda: 8 },
+  founders: [
+    { id: "f1", name: "Founder 1", shares: 5000000, group: "Founders" },
+    { id: "f2", name: "Founder 2", shares: 1000000, group: "Founders" },
+    { id: "f3", name: "Founder 3", shares: 1000000, group: "Founders" },
+    { id: "a1", name: "Angel 1", shares: 1000000, group: "Angels" },
+    { id: "a2", name: "Angel 2", shares: 1000000, group: "Angels" },
+    { id: "a3", name: "Angel 3", shares: 1000000, group: "Angels" },
+  ],
+  events: [
+    { id: "e1", kind: "priced", name: "Seed", date: "2021-03-31", preMoney: 15,
+      esopTarget: 0, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 3,
+      investments: [{ investor: "Investor 1", amount: 8 }], secondaries: [] },
+    { id: "e2", kind: "priced", name: "Series A", date: "2022-03-31", preMoney: 37.2,
+      esopTarget: 0.10, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 12.4,
+      investments: [{ investor: "Investor 2", amount: 24 }], secondaries: [] },
+    { id: "e3", kind: "priced", name: "Series B", date: "2024-03-31", preMoney: 200,
+      esopTarget: 0, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 50,
+      investments: [{ investor: "Investor 3", amount: 50 }], secondaries: [] },
+    { id: "e4", kind: "priced", name: "Series C", date: "2026-03-31", preMoney: 450,
+      esopTarget: 0, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 75,
+      investments: [{ investor: "Investor 4", amount: 100 }],
+      secondaries: [
+        { seller: "Investor 1", pct: 1, buyer: "Investor 4" },
+        { seller: "Investor 2", pct: 1, buyer: "Investor 4" },
+        { seller: "Investor 3", pct: 1, buyer: "Investor 4" },
+      ] },
+  ],
+  exit: { value: 1000, date: "2028-03-31" },
+  scenarios: {
+    rounds: ["Series D", "Series E"],
+    cases: [
+      { name: "Best case", dil: [0.15, 0.10] },
+      { name: "Base case", dil: [0.25, 0.15] },
+      { name: "Heavy dilution", dil: [0.35, 0.25] },
+    ],
+  },
+};
+
+/* ================================================================
+   INDICATIVE SECTOR DATA — India-first, by stage of funding.
+   ₹ Cr bands, 2025–26 vintage, refreshed Sep 2026 from public
+   benchmarks. Judgment calls, not live quotes — verify before use.
+================================================================ */
+const STAGES = ["Pre-seed", "Seed", "Series A", "Series B", "Series C+"];
+
+const INDIA_SECTORS = {
+  "Fintech (India)": {
+    basis: "EV / Revenue",
+    note: "Payments and infra earn software-style multiples; lending is valued on book/AUM, not revenue — treat this band as payments-and-SaaS-style fintech. Regulated capital needs make rounds larger than SaaS at the same stage.",
+    stages: {
+      "Pre-seed": { round: [2, 4, 10], post: [12, 30, 55], mult: null },
+      "Seed": { round: [8, 16, 35], post: [45, 90, 180], mult: [12, 20, 35] },
+      "Series A": { round: [40, 80, 140], post: [170, 320, 550], mult: [10, 15, 25] },
+      "Series B": { round: [120, 200, 350], post: [550, 1000, 1700], mult: [6, 10, 15] },
+      "Series C+": { round: [250, 400, 700], post: [1300, 2500, 5000], mult: [4, 7, 10] },
+    },
+    comps: [["PB Fintech (Policybazaar)", "~8–10x rev"], ["Paytm", "~4–5x rev"], ["Zaggle", "~3–4x rev"], ["MobiKwik", "~1–2x rev"]],
+    deals: [
+      ["PhonePe / Walmart-led round", "2023", "$12B pre-money"],
+      ["DMI Finance / MUFG", "2024", "~$3B (lending, book-based)"],
+      ["Perfios / Kedaara & TVG", "2024", "~$1B unicorn round"],
+    ],
+  },
+  "SaaS (India → global)": {
+    basis: "EV / ARR",
+    note: "India-to-global SaaS is judged on US-market metrics: roughly $1M ARR to raise a Series A, 2–2.5× YoY growth, 110%+ NRR. Multiples compress fastest in this sector when growth slows.",
+    stages: {
+      "Pre-seed": { round: [1.5, 3, 7], post: [10, 22, 40], mult: null },
+      "Seed": { round: [6, 12, 25], post: [40, 75, 140], mult: [15, 25, 40] },
+      "Series A": { round: [35, 65, 120], post: [150, 280, 450], mult: [10, 15, 25] },
+      "Series B": { round: [80, 160, 280], post: [450, 800, 1400], mult: [8, 12, 18] },
+      "Series C+": { round: [160, 300, 550], post: [1000, 2000, 4000], mult: [6, 9, 14] },
+    },
+    comps: [["Freshworks", "~4–5x rev"], ["Newgen Software", "~8–10x rev"], ["RateGain", "~5–6x rev"], ["Zoho", "private, profitable — no quoted multiple"]],
+    deals: [
+      ["Whatfix Series E", "2024", "$125M @ ~$900M"],
+      ["LeadSquared unicorn round", "2022", "~$1B, ~20x ARR (peak-cycle marker)"],
+      ["Icertis", "2022", "~$5B (peak-cycle marker)"],
+    ],
+  },
+  "D2C & consumer brands (India)": {
+    basis: "EV / Revenue",
+    note: "Gross margin and repeat rate decide where you sit in the band; profitable brands with a strong offline ramp (the Minimalist path) transact at the top of it.",
+    stages: {
+      "Pre-seed": { round: [1, 2.5, 6], post: [8, 18, 35], mult: null },
+      "Seed": { round: [5, 10, 20], post: [30, 60, 120], mult: [3, 5, 8] },
+      "Series A": { round: [25, 50, 90], post: [120, 250, 400], mult: [2.5, 4, 6] },
+      "Series B": { round: [70, 130, 220], post: [400, 700, 1200], mult: [2, 3, 5] },
+      "Series C+": { round: [130, 250, 450], post: [900, 1800, 3000], mult: [1.5, 2.5, 4] },
+    },
+    comps: [["Nykaa", "~5–6x rev"], ["Vedant Fashions (Manyavar)", "~8–10x rev (profitable premium)"], ["Honasa (Mamaearth)", "~3–4x rev"], ["FirstCry", "~3–4x rev"]],
+    deals: [
+      ["Minimalist / HUL", "2025", "~₹2,955 Cr, ~6x rev"],
+      ["Plix / Marico", "2023", "majority stake, ~₹369 Cr"],
+      ["Honasa IPO", "2023", "~₹10,000 Cr listing"],
+    ],
+  },
+  "Consumer internet & marketplaces (India)": {
+    basis: "EV / net revenue",
+    note: "Priced on net revenue and take rate, never GMV; liquidity and purchase frequency drive the premium — quick commerce currently trades at the very top of every band.",
+    stages: {
+      "Pre-seed": { round: [2, 4, 9], post: [12, 28, 50], mult: null },
+      "Seed": { round: [8, 16, 35], post: [40, 90, 180], mult: [8, 15, 25] },
+      "Series A": { round: [40, 85, 160], post: [200, 350, 650], mult: [6, 10, 18] },
+      "Series B": { round: [120, 250, 450], post: [600, 1200, 2200], mult: [4, 8, 12] },
+      "Series C+": { round: [300, 550, 1000], post: [1500, 3000, 6000], mult: [3, 6, 10] },
+    },
+    comps: [["Eternal (Zomato + Blinkit)", "~8–12x rev"], ["IndiaMART", "~7–8x rev"], ["ixigo", "~6–8x rev"], ["Swiggy", "~3–4x rev"]],
+    deals: [
+      ["Zepto", "2024–25", "quick-commerce rounds to ~$5B"],
+      ["Rapido Series E", "2024", "$1.1B unicorn"],
+      ["Flipkart / Walmart", "2018", "$16B for 77%"],
+    ],
+  },
+};
+
+const GLOBAL_SECTORS = {
+  "Horizontal SaaS": {
+    evRev: [4, 7, 12], evRevLabel: "EV / NTM Revenue",
+    note: "Median public SaaS trades mid-single-digit forward revenue; premium for 30%+ growth and 110%+ NRR.",
+    comps: [["Salesforce", "~6–7x"], ["HubSpot", "~8–9x"], ["Monday.com", "~8–10x"], ["Asana", "~3–4x"]],
+    deals: [
+      ["Smartsheet / Blackstone & Vista", "2024", "~5.8x rev"],
+      ["Zendesk / H&F & Permira", "2022", "~5.9x rev"],
+      ["Slack / Salesforce", "2021", "~26x ARR (peak-cycle outlier)"],
+    ],
+  },
+  "Vertical SaaS": {
+    evRev: [5, 8, 14], evRevLabel: "EV / NTM Revenue",
+    note: "Vertical leaders command a premium for market ownership and payments attach.",
+    comps: [["Veeva", "~11–13x"], ["Toast", "~4–5x"], ["Procore", "~7–8x"], ["Tyler Tech", "~10x"]],
+    deals: [
+      ["EngageSmart / Vista", "2023", "~10x rev"],
+      ["Instructure / KKR", "2024", "~7.8x rev"],
+      ["Anaplan / Thoma Bravo", "2022", "~13x rev"],
+    ],
+  },
+  "AI Infra & Apps": {
+    evRev: [10, 18, 30], evRevLabel: "EV / NTM Revenue",
+    note: "Widest dispersion of any sector; multiples hinge on growth durability and gross margin, not just the AI label.",
+    comps: [["Palantir", "~50x+ (outlier)"], ["Snowflake", "~12–14x"], ["Datadog", "~13–15x"], ["MongoDB", "~8–10x"]],
+    deals: [
+      ["MosaicML / Databricks", "2023", "$1.3B, pre-revenue-scale"],
+      ["Rockset / OpenAI", "2024", "talent + tech"],
+      ["Neeva / Snowflake", "2023", "talent + tech"],
+    ],
+  },
+  "Fintech": {
+    evRev: [3, 6, 10], evRevLabel: "EV / NTM Revenue",
+    note: "Payments and infra earn software multiples; balance-sheet-heavy lending models price closer to financials.",
+    comps: [["Adyen", "~11–13x"], ["Block", "~2–3x"], ["Wise", "~6–8x"], ["Nubank", "~7–9x"]],
+    deals: [
+      ["GreenSky / Sixth Street", "2024", "distressed"],
+      ["MoneyGram / Madison Dearborn", "2023", "~1.6x rev"],
+      ["Bill.com / Divvy", "2021", "~25x ARR (peak-cycle)"],
+    ],
+  },
+  "Marketplace": {
+    evRev: [2, 4, 8], evRevLabel: "EV / NTM Revenue (net)",
+    note: "Priced on net revenue / take rate, not GMV. Liquidity depth and repeat rate drive the premium.",
+    comps: [["Airbnb", "~8–9x"], ["Etsy", "~2–3x"], ["Fiverr", "~2x"], ["Instacart", "~3–4x"]],
+    deals: [
+      ["Grubhub / Wonder", "2024", "~0.2x GMV (distressed)"],
+      ["Depop / Etsy", "2021", "~25x rev (peak-cycle)"],
+      ["Rover / Blackstone", "2023", "~9x rev"],
+    ],
+  },
+  "D2C & Consumer": {
+    evRev: [1, 2, 4], evRevLabel: "EV / Revenue",
+    note: "Gross margin and repeat purchase economics dominate; brand strength earns the top of the band.",
+    comps: [["e.l.f. Beauty", "~4–5x"], ["On Running", "~5–6x"], ["Warby Parker", "~2x"], ["Allbirds", "<1x"]],
+    deals: [
+      ["Supergoop / Blackstone", "2021", "undisclosed, est. ~5x+"],
+      ["Tula / P&G", "2022", "est. ~4x rev"],
+      ["Native / P&G", "2017", "~2.5x rev"],
+    ],
+  },
+  "Healthtech": {
+    evRev: [2, 4, 7], evRevLabel: "EV / NTM Revenue",
+    note: "Reimbursement exposure caps multiples; pure software (no care delivery) earns SaaS-like pricing.",
+    comps: [["Veeva (life sci)", "~11–13x"], ["Doximity", "~9–11x"], ["Hims & Hers", "~3–4x"], ["Teladoc", "~1x"]],
+    deals: [
+      ["Shockwave / J&J", "2024", "~13x rev (medtech)"],
+      ["Nuance / Microsoft", "2022", "~13x rev"],
+      ["One Medical / Amazon", "2023", "~3.7x rev"],
+    ],
+  },
+  "Cybersecurity": {
+    evRev: [6, 10, 16], evRevLabel: "EV / NTM Revenue",
+    note: "Durable budget line; platform consolidators pay up for ARR with low churn.",
+    comps: [["CrowdStrike", "~15–18x"], ["Palo Alto", "~12–14x"], ["Zscaler", "~10–12x"], ["SentinelOne", "~6–7x"]],
+    deals: [
+      ["Wiz / Google", "2025", "~$32B, ~45x ARR (strategic outlier)"],
+      ["Splunk / Cisco", "2024", "~7x rev"],
+      ["Imperva / Thales", "2023", "~7x rev"],
+    ],
+  },
+  "Devtools & Infra": {
+    evRev: [6, 10, 18], evRevLabel: "EV / NTM Revenue",
+    note: "Usage-based models get premium when net expansion is strong; seat-based tools price like SaaS.",
+    comps: [["Datadog", "~13–15x"], ["GitLab", "~7–8x"], ["Cloudflare", "~18–20x"], ["HashiCorp", "~9x (acq.)"]],
+    deals: [
+      ["HashiCorp / IBM", "2024", "~9x rev"],
+      ["Figma / Adobe", "2023", "~50x ARR (terminated)"],
+      ["GitHub / Microsoft", "2018", "~30x ARR"],
+    ],
+  },
+};
+const SECTORS = { ...INDIA_SECTORS, ...GLOBAL_SECTORS };
+
+/* ================================================================
+   MONEY FORMATTING — unit-aware (INR Cr vs USD-style compact)
+================================================================ */
+let MONEY = { sym: "₹", unit: "cr" };
+const fmtMoney = (v, digits) => {
+  if (v == null || isNaN(v)) return "—";
+  const sign = v < 0 ? "−" : "";
+  const abs = Math.abs(v);
+  if (MONEY.unit === "cr") {
+    if (abs >= 1000) return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })} Cr`;
+    if (abs >= 100) return `${sign}₹${abs.toFixed(digits != null ? digits : 0)} Cr`;
+    if (abs >= 1) return `${sign}₹${abs.toFixed(digits != null ? digits : 1)} Cr`;
+    if (abs > 0) return `${sign}₹${(abs * 100).toFixed(0)} L`;
+    return "₹0";
+  }
+  const cur = MONEY.sym;
+  if (abs >= 1e9) return `${sign}${cur}${(abs / 1e9).toFixed(digits != null ? digits : 1)}B`;
+  if (abs >= 1e6) return `${sign}${cur}${(abs / 1e6).toFixed(digits != null ? digits : 1)}M`;
+  if (abs >= 1e3) return `${sign}${cur}${(abs / 1e3).toFixed(0)}k`;
+  return `${sign}${cur}${abs.toFixed(0)}`;
+};
+const unitLabel = () => MONEY.unit === "cr" ? "₹ Cr" : MONEY.sym;
+const fmtCr = v => v >= 1000 ? `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })} Cr` : `₹${v} Cr`;
+const fmtPct = (v, d = 1) => (v == null || isNaN(v)) ? "—" : (v * 100).toFixed(d) + "%";
+const fmtShares = v => (v == null || isNaN(v)) ? "—" : Math.round(v).toLocaleString("en-US");
+const fmtX = v => (v == null || isNaN(v) || !isFinite(v)) ? "—" : v.toFixed(v >= 10 ? 1 : 2) + "×";
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+/* ================================================================
+   ENGINE — pure functions
+================================================================ */
+function sortedEvents(state) {
+  return [...state.events].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+}
+
+/** Full cap table history.
+ * positions: [{holder, group, kind, eventId, shares, invested, secondary, date,
+ *              prefMultiple, participating, rank}]
+ * realized:  [{holder, date, amount, note}]  — secondary sale proceeds
+ * snapshots: [{label, date, totals:{group:shares}, totalShares, price, postMoney}]
+ */
+function computeCapTable(state) {
+  const errors = [];
+  const events = sortedEvents(state);
+  const positions = [];
+  const realized = [];
+  const groupsBase = [];
+  state.founders.forEach(f => {
+    const g = f.group === "Angels" ? "Angels" : "Founders";
+    if (!groupsBase.includes(g)) groupsBase.push(g);
+    if (f.shares > 0) positions.push({
+      holder: f.name || "Shareholder", group: g, kind: "common",
+      eventId: null, shares: f.shares, invested: 0, secondary: false, date: null,
+    });
+  });
+  if (!groupsBase.includes("Founders")) groupsBase.unshift("Founders");
+  const groups = [...groupsBase, "ESOP"];
+  let esopShares = 0;
+  let pendingSafes = [];
+
+  const snapAt = (label, date, price, postMoney) => {
+    const totals = {};
+    positions.forEach(p => { totals[p.group] = (totals[p.group] || 0) + p.shares; });
+    totals["ESOP"] = esopShares;
+    const totalShares = Object.values(totals).reduce((a, b) => a + b, 0);
+    return { label, date, totals, totalShares, price, postMoney };
+  };
+  const snapshots = [snapAt("Founding", null, null, null)];
+
+  events.forEach((ev, evIdx) => {
+    const rank = evIdx + 1; // seniority: later = senior
+    if (ev.kind === "safe") {
+      pendingSafes.push({ ...ev, rank });
+      if (!groups.includes(ev.name)) groups.push(ev.name);
+      snapshots.push(snapAt(ev.name + " (unconverted)", ev.date, null, null));
+      return;
+    }
+    if (ev.kind !== "priced") return;
+    if (!groups.includes(ev.name)) groups.push(ev.name);
+
+    const S_pre = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
+    const totalNew = (ev.investments || []).reduce((a, i) => a + (i.amount || 0), 0);
+    const preMoney = ev.preMoney || 0;
+    if (preMoney <= 0 || S_pre <= 0) {
+      errors.push(`${ev.name}: needs a positive pre-money and existing shares.`);
+      snapshots.push(snapAt(ev.name, ev.date, null, null));
+      return;
+    }
+
+    const target = ev.esopTarget || 0;
+    const timingPre = (ev.esopTiming || "post") === "pre";
+
+    // Iteratively solve price + SAFE conversion (+ pre-money pool if that timing)
+    let price = preMoney / S_pre;
+    let poolAdd = 0;
+    let safeShares = pendingSafes.map(() => 0);
+    for (let iter = 0; iter < 60; iter++) {
+      const totalSafe0 = safeShares.reduce((a, b) => a + b, 0);
+      const capBase = S_pre + poolAdd + totalSafe0; // post-money SAFE company capitalization
+      safeShares = pendingSafes.map(s => {
+        const amt = s.amount || 0;
+        let capSh = 0;
+        if (s.cap > 0) {
+          if (s.capType === "post") capSh = (amt / s.cap) * capBase;
+          else capSh = amt / (s.cap / (S_pre + poolAdd));
+        }
+        const discSh = (s.discount > 0 && price > 0) ? amt / (price * (1 - s.discount)) : 0;
+        return Math.max(capSh, discSh, (s.cap > 0 || s.discount > 0) ? 0 : (price > 0 ? amt / price : 0));
+      });
+      const totalSafe = safeShares.reduce((a, b) => a + b, 0);
+      price = preMoney / (S_pre + poolAdd + totalSafe);
+      if (timingPre && target > 0) {
+        const invShares = price > 0 ? totalNew / price : 0;
+        const denom = 1 - target;
+        poolAdd = Math.max(0, (target * (S_pre + totalSafe + invShares) - esopShares) / (denom > 0 ? denom : 1));
+      } else poolAdd = 0;
+    }
+
+    // SAFE conversions become 1x non-participating preferred, pari passu with this round
+    pendingSafes.forEach((s, i) => {
+      positions.push({
+        holder: s.investor || s.name, group: s.name, kind: "preferred",
+        eventId: s.id, shares: safeShares[i], invested: s.amount || 0, secondary: false, date: s.date,
+        prefMultiple: 1, participating: false, rank,
+      });
+    });
+    pendingSafes = [];
+    esopShares += poolAdd;
+
+    (ev.investments || []).forEach(inv => {
+      if (!(inv.amount > 0)) return;
+      positions.push({
+        holder: inv.investor || "Investor", group: ev.name, kind: "preferred",
+        eventId: ev.id, shares: price > 0 ? inv.amount / price : 0, invested: inv.amount, secondary: false, date: ev.date,
+        prefMultiple: ev.prefMultiple || 1, participating: !!ev.participating, rank,
+      });
+    });
+
+    // Post-round ESOP top-up (dilutes everyone, incl. the new investors) — sample-file convention
+    if (!timingPre && target > 0 && target < 1) {
+      const FD_after = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
+      const want = (target * FD_after - esopShares) / (1 - target);
+      if (want > 0) esopShares += want;
+    }
+
+    // Secondary sales at this round, priced at the round's price per share
+    (ev.secondaries || []).forEach(sec => {
+      const pct = Math.min(1, Math.max(0, sec.pct || 0));
+      if (!sec.seller || pct <= 0 || !(price > 0)) return;
+      const sellerPos = positions.filter(p => p.holder === sec.seller && p.shares > 0);
+      if (!sellerPos.length) { errors.push(`${ev.name}: secondary seller "${sec.seller}" holds no shares at that date.`); return; }
+      let totalValue = 0;
+      sellerPos.forEach(p => {
+        const sold = p.shares * pct;
+        if (sold <= 0) return;
+        p.shares -= sold;
+        const value = sold * price;
+        totalValue += value;
+        positions.push({
+          holder: sec.buyer || "Buyer", group: ev.name, kind: p.kind,
+          eventId: ev.id, shares: sold, invested: value, secondary: true, date: ev.date,
+          prefMultiple: p.prefMultiple, participating: p.participating, rank: p.rank,
+        });
+      });
+      if (totalValue > 0) realized.push({
+        holder: sec.seller, date: ev.date, amount: totalValue,
+        note: `Sold ${fmtPct(pct, 0)} of stake at ${ev.name}`,
+      });
+    });
+
+    const FD = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
+    snapshots.push(snapAt(ev.name, ev.date, price, preMoney + totalNew));
+  });
+
+  const esopPos = { holder: "Option pool (ESOP)", group: "ESOP", kind: "common", eventId: null, shares: esopShares, invested: 0, secondary: false, date: null };
+  return { snapshots, positions, esopShares, esopPos, groups, errors, realized };
+}
+
+/** Exit waterfall with convert-vs-preference equilibrium. */
+function computeWaterfall(cap, exitValue) {
+  const allPos = [...cap.positions, cap.esopPos].filter(p => p.shares > 0);
+  const classes = new Map();
+  allPos.forEach(p => {
+    if (p.kind !== "preferred") return;
+    const key = p.eventId + "|" + p.rank + "|" + (p.prefMultiple || 1) + "|" + (p.participating ? 1 : 0);
+    if (!classes.has(key)) classes.set(key, {
+      key, rank: p.rank, prefMultiple: p.prefMultiple || 1, participating: !!p.participating,
+      shares: 0, invested: 0, positions: [],
+    });
+    const c = classes.get(key);
+    c.shares += p.shares; c.invested += p.invested; c.positions.push(p);
+  });
+  const clsList = [...classes.values()].sort((a, b) => b.rank - a.rank);
+  const commonPos = allPos.filter(p => p.kind === "common");
+  const commonShares = commonPos.reduce((a, p) => a + p.shares, 0);
+  const totalShares = allPos.reduce((a, p) => a + p.shares, 0);
+
+  const choice = {};
+  clsList.forEach(c => { choice[c.key] = c.participating ? "part" : "pref"; });
+
+  const distribute = () => {
+    let remaining = exitValue;
+    const classPay = {};
+    clsList.forEach(c => {
+      classPay[c.key] = 0;
+      if (choice[c.key] === "pref" || choice[c.key] === "part") {
+        const pref = Math.min(remaining, c.prefMultiple * c.invested);
+        classPay[c.key] += pref; remaining -= pref;
+      }
+    });
+    let partShares = commonShares;
+    clsList.forEach(c => { if (choice[c.key] !== "pref") partShares += c.shares; });
+    const perShare = partShares > 0 ? remaining / partShares : 0;
+    clsList.forEach(c => { if (choice[c.key] !== "pref") classPay[c.key] += perShare * c.shares; });
+    return { classPay, perShareCommon: perShare };
+  };
+
+  let result = distribute();
+  for (let iter = 0; iter < 24; iter++) {
+    let changed = false;
+    for (const c of clsList) {
+      if (c.participating) continue;
+      const cur = choice[c.key];
+      const curPay = result.classPay[c.key];
+      choice[c.key] = cur === "pref" ? "convert" : "pref";
+      const altResult = distribute();
+      if (altResult.classPay[c.key] > curPay + 1e-9) { result = altResult; changed = true; }
+      else { choice[c.key] = cur; }
+    }
+    if (!changed) break;
+    result = distribute();
+  }
+
+  const rows = [];
+  commonPos.forEach(p => rows.push({
+    holder: p.holder, group: p.group, shares: p.shares, invested: p.invested,
+    proceeds: result.perShareCommon * p.shares, route: "Common",
+  }));
+  clsList.forEach(c => {
+    const label = c.participating ? "Participating pref."
+      : choice[c.key] === "pref" ? `${c.prefMultiple}× preference` : "Converted to common";
+    c.positions.forEach(p => rows.push({
+      holder: p.holder, group: p.group, shares: p.shares, invested: p.invested,
+      proceeds: c.shares > 0 ? result.classPay[c.key] * (p.shares / c.shares) : 0, route: label,
+    }));
+  });
+  // merge rows of same holder+group+route
+  const merged = new Map();
+  rows.forEach(r => {
+    const k = r.holder + "|" + r.group + "|" + r.route;
+    if (!merged.has(k)) merged.set(k, { ...r });
+    else {
+      const m = merged.get(k);
+      m.shares += r.shares; m.invested += r.invested; m.proceeds += r.proceeds;
+    }
+  });
+  const out = [...merged.values()].sort((a, b) => b.proceeds - a.proceeds);
+  return { rows: out, totalShares, exitValue };
+}
+
+/** XIRR via bisection. flows: [{date, amount}], negative = outflow */
+function xirr(flows) {
+  const fl = flows.filter(f => f.amount !== 0 && f.date).map(f => ({ t: new Date(f.date).getTime(), a: f.amount }));
+  if (fl.length < 2) return null;
+  if (!fl.some(f => f.a < 0) || !fl.some(f => f.a > 0)) return null;
+  const t0 = Math.min(...fl.map(f => f.t));
+  const yrs = f => (f.t - t0) / (365.25 * 24 * 3600 * 1000);
+  if (Math.max(...fl.map(yrs)) < 0.02) return null; // flows too close together for a meaningful IRR
+  const npv = r => fl.reduce((a, f) => a + f.a / Math.pow(1 + r, yrs(f)), 0);
+  let lo = -0.9999, hi = 100;
+  let fLo = npv(lo), fHi = npv(hi);
+  if (fLo * fHi > 0) return null;
+  for (let i = 0; i < 120; i++) {
+    const mid = (lo + hi) / 2, fMid = npv(mid);
+    if (Math.abs(fMid) < 1e-7) return mid;
+    if (fLo * fMid < 0) { hi = mid; fHi = fMid; } else { lo = mid; fLo = fMid; }
+  }
+  return (lo + hi) / 2;
+}
+
+/* ================================================================
+   TOOLTIP + COLOR
+================================================================ */
+function useTooltip() {
+  const [tt, setTt] = useState(null);
+  const show = (e, content) => setTt({ x: e.clientX, y: e.clientY, content });
+  const move = e => setTt(t => t ? { ...t, x: e.clientX, y: e.clientY } : t);
+  const hide = () => setTt(null);
+  const node = tt ? (
+    <div className="tooltip" style={{
+      left: Math.min(tt.x + 14, window.innerWidth - 280),
+      top: Math.min(tt.y + 14, window.innerHeight - 130),
+    }}>{tt.content}</div>
+  ) : null;
+  return { show, move, hide, node };
+}
+
+const slotColor = (groups, group) => {
+  const i = groups.indexOf(group);
+  return `var(--s${(i >= 0 ? i : 7) % 8 + 1})`;
+};
+
+/* ================================================================
+   CHARTS
+================================================================ */
+function OwnershipBar({ cap }) {
+  const tt = useTooltip();
+  const allPos = [...cap.positions, cap.esopPos];
+  const total = allPos.reduce((a, p) => a + p.shares, 0);
+  if (total <= 0) return null;
+  const byGroup = cap.groups.map(g => ({
+    group: g,
+    shares: allPos.filter(p => p.group === g).reduce((a, p) => a + p.shares, 0),
+  })).filter(d => d.shares > 0.5);
+  const W = 900, H = 64, barY = 8, barH = 34;
+  let x = 0;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
+        aria-label="Fully diluted ownership today">
+        {byGroup.map(d => {
+          const w = (d.shares / total) * W;
+          const seg = (
+            <g key={d.group}>
+              <rect x={x + 1} y={barY} width={Math.max(0, w - 2)} height={barH} rx="3"
+                fill={slotColor(cap.groups, d.group)}
+                onMouseEnter={e => tt.show(e, <div>
+                  <div className="tt-title">{d.group}</div>
+                  <div className="tt-row"><span>Ownership</span><b>{fmtPct(d.shares / total)}</b></div>
+                </div>)}
+                onMouseMove={tt.move} onMouseLeave={tt.hide} />
+              {w > 88 && <text x={x + 8} y={barY + barH + 16} className="axis-t">{d.group}</text>}
+              {w > 52 && <text x={x + 8} y={barY + barH / 2 + 4} style={{ fontSize: 12, fontWeight: 700 }}
+                fill="var(--ink)" className="mono">{fmtPct(d.shares / total, 0)}</text>}
+            </g>
+          );
+          x += w;
+          return seg;
+        })}
+      </svg>
+      <div className="legend">
+        {byGroup.map(d => <span className="item" key={d.group}>
+          <span className="swatch" style={{ background: slotColor(cap.groups, d.group) }}></span>{d.group}
+        </span>)}
+      </div>
+      {tt.node}
+    </div>
+  );
+}
+
+function DilutionArea({ cap }) {
+  const tt = useTooltip();
+  const snaps = cap.snapshots.filter(s => s.totalShares > 0);
+  if (snaps.length < 2) return <p className="hint">Add rounds to see the dilution story.</p>;
+  const W = 900, H = 300, padL = 44, padR = 12, padT = 12, padB = 30;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const xs = snaps.map((s, i) => padL + (i / (snaps.length - 1)) * iw);
+  const groups = cap.groups.filter(g => snaps.some(s => (s.totals[g] || 0) > 0.5));
+  const fracs = snaps.map(s => {
+    let acc = 0; const out = {};
+    groups.forEach(g => {
+      const f = (s.totals[g] || 0) / s.totalShares;
+      out[g] = [acc, acc + f]; acc += f;
+    });
+    return out;
+  });
+  const yOf = f => padT + ih * (1 - f);
+  const areaPath = g => {
+    const top = xs.map((x, i) => `${x},${yOf(fracs[i][g][1])}`);
+    const bot = xs.map((x, i) => `${x},${yOf(fracs[i][g][0])}`).reverse();
+    return `M${top.join("L")}L${bot.join("L")}Z`;
+  };
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
+        aria-label="Ownership by holder group across rounds">
+        {[0, 0.25, 0.5, 0.75, 1].map(f => (
+          <g key={f}>
+            <line x1={padL} x2={W - padR} y1={yOf(f)} y2={yOf(f)} stroke="var(--grid)" strokeWidth="1" />
+            <text x={padL - 8} y={yOf(f) + 4} textAnchor="end" className="axis-t">{Math.round(f * 100)}%</text>
+          </g>
+        ))}
+        {groups.map(g => (
+          <path key={g} d={areaPath(g)} fill={slotColor(cap.groups, g)} fillOpacity="0.85"
+            stroke="var(--surface)" strokeWidth="1.5" />
+        ))}
+        {snaps.map((s, i) => (
+          <g key={i}>
+            <rect x={xs[i] - (i === 0 ? 0 : iw / (snaps.length - 1) / 2)} y={padT}
+              width={iw / Math.max(1, snaps.length - 1)} height={ih} fill="transparent"
+              onMouseEnter={e => tt.show(e, <div>
+                <div className="tt-title">{s.label}</div>
+                {groups.filter(g => (s.totals[g] || 0) > 0.5).map(g => (
+                  <div className="tt-row" key={g}>
+                    <span><span className="swatch" style={{ background: slotColor(cap.groups, g) }}></span>{g}</span>
+                    <b>{fmtPct((s.totals[g] || 0) / s.totalShares)}</b>
+                  </div>
+                ))}
+              </div>)}
+              onMouseMove={tt.move} onMouseLeave={tt.hide} />
+            <text x={xs[i]} y={H - 8} textAnchor={i === 0 ? "start" : i === snaps.length - 1 ? "end" : "middle"}
+              className="axis-t">{s.label.replace(" (unconverted)", "*")}</text>
+          </g>
+        ))}
+        <line x1={padL} x2={W - padR} y1={yOf(0)} y2={yOf(0)} stroke="var(--baseline)" strokeWidth="1" />
+      </svg>
+      <div className="legend">
+        {groups.map(g => <span className="item" key={g}>
+          <span className="swatch" style={{ background: slotColor(cap.groups, g) }}></span>{g}
+        </span>)}
+      </div>
+      {tt.node}
+    </div>
+  );
+}
+
+function WaterfallChart({ wf, cap }) {
+  const tt = useTooltip();
+  const rows = wf.rows.filter(r => r.proceeds > 0);
+  if (!rows.length) return <p className="hint">No proceeds at this exit value.</p>;
+  const W = 900, rowH = 30, padL = 190, padR = 95, padT = 6;
+  const H = padT + rows.length * rowH + 10;
+  const maxV = Math.max(...rows.map(r => r.proceeds));
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
+        aria-label="Exit proceeds by holder">
+        {rows.map((r, i) => {
+          const y = padT + i * rowH;
+          const w = Math.max(2, (r.proceeds / maxV) * (W - padL - padR));
+          return (
+            <g key={i}
+              onMouseEnter={e => tt.show(e, <div>
+                <div className="tt-title">{r.holder}</div>
+                <div className="tt-row"><span>Proceeds</span><b>{fmtMoney(r.proceeds)}</b></div>
+                <div className="tt-row"><span>Route</span><b>{r.route}</b></div>
+                {r.invested > 0 && <div className="tt-row"><span>Multiple</span><b>{fmtX(r.proceeds / r.invested)}</b></div>}
+              </div>)}
+              onMouseMove={tt.move} onMouseLeave={tt.hide}>
+              <text x={padL - 10} y={y + rowH / 2 + 4} textAnchor="end" className="axis-t"
+                style={{ fill: "var(--ink-2)" }}>{r.holder.length > 24 ? r.holder.slice(0, 23) + "…" : r.holder}</text>
+              <rect x={padL} y={y + 5} width={w} height={rowH - 12} rx="3"
+                fill={slotColor(cap.groups, r.group)} />
+              <text x={padL + w + 8} y={y + rowH / 2 + 4} className="val-t">{fmtMoney(r.proceeds)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      {tt.node}
+    </div>
+  );
+}
+
+function MultipleRange({ sector, band, company, impliedLow, impliedHigh }) {
+  const tt = useTooltip();
+  const [lo, med, hi] = band;
+  const axMax = Math.ceil(hi * 1.25);
+  const W = 900, H = 96, padL = 14, padR = 14, y = 40;
+  const xOf = v => padL + (v / axMax) * (W - padL - padR);
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
+        aria-label={`${sector} multiple range`}>
+        <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="var(--grid)" strokeWidth="2" />
+        {[0, Math.round(axMax / 2), axMax].map(v => (
+          <g key={v}>
+            <line x1={xOf(v)} x2={xOf(v)} y1={y - 5} y2={y + 5} stroke="var(--baseline)" strokeWidth="1" />
+            <text x={xOf(v)} y={y + 24} textAnchor="middle" className="axis-t">{v}×</text>
+          </g>
+        ))}
+        <rect x={xOf(lo)} y={y - 9} width={xOf(hi) - xOf(lo)} height={18} rx="4"
+          fill="var(--s1)" fillOpacity="0.25"
+          onMouseEnter={e => tt.show(e, <div>
+            <div className="tt-title">{sector} band</div>
+            <div className="tt-row"><span>Low – High</span><b>{lo}× – {hi}×</b></div>
+          </div>)} onMouseMove={tt.move} onMouseLeave={tt.hide} />
+        <line x1={xOf(med)} x2={xOf(med)} y1={y - 12} y2={y + 12} stroke="var(--s1)" strokeWidth="3" />
+        <text x={xOf(med)} y={y - 18} textAnchor="middle" className="val-t" style={{ fill: "var(--ink)" }}>median {med}×</text>
+        <text x={xOf(lo)} y={y + 24} textAnchor="middle" className="axis-t">{lo}×</text>
+        <text x={xOf(hi)} y={y + 24} textAnchor="middle" className="axis-t">{hi}×</text>
+      </svg>
+      <p className="hint" style={{ marginTop: 4 }}>
+        Applied to {company.name}'s revenue of {fmtMoney(company.revenue)}: indicative EV of{" "}
+        <b className="mono">{fmtMoney(impliedLow)}</b> – <b className="mono">{fmtMoney(impliedHigh)}</b>{" "}
+        (median {fmtMoney(company.revenue * med)}).
+      </p>
+      {tt.node}
+    </div>
+  );
+}
+
+/* ================================================================
+   EDITORS
+================================================================ */
+function NumInput({ value, onChange, step = "any", min, style, placeholder }) {
+  const [raw, setRaw] = useState(value == null ? "" : String(value));
+  useEffect(() => { setRaw(value == null ? "" : String(value)); }, [value]);
+  return <input type="number" className="num" value={raw} step={step} min={min} style={style} placeholder={placeholder}
+    onChange={e => setRaw(e.target.value)}
+    onBlur={() => onChange(raw === "" ? 0 : parseFloat(raw) || 0)} />;
+}
+
+function SafeEditor({ ev, onChange, onDelete }) {
+  return (
+    <div className="panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <h3><span className="pill accent">SAFE / note</span>&nbsp; {ev.name || "SAFE"}</h3>
+        <button className="btn sm danger" onClick={onDelete}>Remove</button>
+      </div>
+      <div className="frow" style={{ marginTop: 8 }}>
+        <div><label className="f">Label</label>
+          <input value={ev.name} onChange={e => onChange({ ...ev, name: e.target.value })} style={{ width: 150 }} /></div>
+        <div><label className="f">Date</label>
+          <input type="date" value={ev.date} onChange={e => onChange({ ...ev, date: e.target.value })} /></div>
+        <div><label className="f">Investor</label>
+          <input value={ev.investor} onChange={e => onChange({ ...ev, investor: e.target.value })} style={{ width: 160 }} /></div>
+        <div><label className="f">Amount ({unitLabel()})</label>
+          <NumInput value={ev.amount} onChange={v => onChange({ ...ev, amount: v })} style={{ width: 110 }} /></div>
+        <div><label className="f">Cap type</label>
+          <select value={ev.capType} onChange={e => onChange({ ...ev, capType: e.target.value })}>
+            <option value="post">Post-money</option>
+            <option value="pre">Pre-money</option>
+          </select></div>
+        <div><label className="f">Valuation cap ({unitLabel()})</label>
+          <NumInput value={ev.cap} onChange={v => onChange({ ...ev, cap: v })} style={{ width: 120 }} /></div>
+        <div><label className="f">Discount %</label>
+          <NumInput value={Math.round((ev.discount || 0) * 100)} onChange={v => onChange({ ...ev, discount: (v || 0) / 100 })} style={{ width: 75 }} /></div>
+      </div>
+      <p className="hint" style={{ margin: "10px 0 0" }}>Converts at the next priced round at the better of cap price and discount price; treated as 1× non-participating preferred after conversion.</p>
+    </div>
+  );
+}
+
+function PricedEditor({ ev, onChange, onDelete, holderNames }) {
+  const setInv = (i, patch) => onChange({ ...ev, investments: ev.investments.map((x, j) => j === i ? { ...x, ...patch } : x) });
+  const secs = ev.secondaries || [];
+  const setSec = (i, patch) => onChange({ ...ev, secondaries: secs.map((x, j) => j === i ? { ...x, ...patch } : x) });
+  return (
+    <div className="panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <h3><span className="pill accent">Priced round</span>&nbsp; {ev.name || "Round"}</h3>
+        <button className="btn sm danger" onClick={onDelete}>Remove</button>
+      </div>
+      <div className="frow" style={{ marginTop: 8 }}>
+        <div><label className="f">Name</label>
+          <input value={ev.name} onChange={e => onChange({ ...ev, name: e.target.value })} style={{ width: 110 }} /></div>
+        <div><label className="f">Date</label>
+          <input type="date" value={ev.date} onChange={e => onChange({ ...ev, date: e.target.value })} /></div>
+        <div><label className="f">Pre-money ({unitLabel()})</label>
+          <NumInput value={ev.preMoney} onChange={v => onChange({ ...ev, preMoney: v })} style={{ width: 110 }} /></div>
+        <div><label className="f">Revenue at round</label>
+          <NumInput value={ev.revenue} onChange={v => onChange({ ...ev, revenue: v })} style={{ width: 100 }} /></div>
+        <div><label className="f">ESOP target %</label>
+          <NumInput value={Math.round((ev.esopTarget || 0) * 100)} onChange={v => onChange({ ...ev, esopTarget: (v || 0) / 100 })} style={{ width: 70 }} /></div>
+        <div><label className="f">ESOP timing</label>
+          <select value={ev.esopTiming || "post"} onChange={e => onChange({ ...ev, esopTiming: e.target.value })}>
+            <option value="post">Post-round (dilutes all)</option>
+            <option value="pre">Pre-money (dilutes existing)</option>
+          </select></div>
+        <div><label className="f">Liq. pref ×</label>
+          <NumInput value={ev.prefMultiple} onChange={v => onChange({ ...ev, prefMultiple: v || 1 })} style={{ width: 60 }} /></div>
+        <div><label className="f">Participating</label>
+          <select value={ev.participating ? "yes" : "no"} onChange={e => onChange({ ...ev, participating: e.target.value === "yes" })}>
+            <option value="no">No</option><option value="yes">Yes</option>
+          </select></div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <label className="f">New money</label>
+        {ev.investments.map((inv, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <input value={inv.investor} placeholder="Investor name"
+              onChange={e => setInv(i, { investor: e.target.value })} style={{ flex: "1 1 160px", maxWidth: 230 }} />
+            <NumInput value={inv.amount} onChange={v => setInv(i, { amount: v })} style={{ width: 110 }} placeholder="Amount" />
+            <button className="btn sm danger" onClick={() =>
+              onChange({ ...ev, investments: ev.investments.filter((_, j) => j !== i) })}>×</button>
+          </div>
+        ))}
+        <button className="btn sm" onClick={() =>
+          onChange({ ...ev, investments: [...ev.investments, { investor: "", amount: 0 }] })}>+ Add investor</button>
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <label className="f">Secondary sales at this round (priced at the round's price per share)</label>
+        {secs.map((sec, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={sec.seller} onChange={e => setSec(i, { seller: e.target.value })} style={{ minWidth: 140 }}>
+              <option value="">— seller —</option>
+              {holderNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <span className="hint" style={{ margin: 0 }}>sells</span>
+            <NumInput value={Math.round((sec.pct || 0) * 100)} onChange={v => setSec(i, { pct: Math.min(100, Math.max(0, v || 0)) / 100 })} style={{ width: 65 }} />
+            <span className="hint" style={{ margin: 0 }}>% of stake to</span>
+            <input value={sec.buyer} placeholder="Buyer" onChange={e => setSec(i, { buyer: e.target.value })} style={{ width: 150 }} />
+            <button className="btn sm danger" onClick={() =>
+              onChange({ ...ev, secondaries: secs.filter((_, j) => j !== i) })}>×</button>
+          </div>
+        ))}
+        <button className="btn sm" onClick={() =>
+          onChange({ ...ev, secondaries: [...secs, { seller: "", pct: 1, buyer: (ev.investments[0] && ev.investments[0].investor) || "" }] })}>+ Add secondary</button>
+      </div>
+    </div>
+  );
+}
+
+function SectorSelect({ value, onChange, style }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={style}>
+      <optgroup label="India — stage benchmarks">
+        {Object.keys(INDIA_SECTORS).map(k => <option key={k}>{k}</option>)}
+      </optgroup>
+      <optgroup label="Global — sector bands">
+        {Object.keys(GLOBAL_SECTORS).map(k => <option key={k}>{k}</option>)}
+      </optgroup>
+    </select>
+  );
+}
+
+/* ================================================================
+   SETUP WIZARD — inputs first, dashboard second
+================================================================ */
+function SetupWizard({ onDone, onExample, onCancel }) {
+  const [step, setStep] = useState(0);
+  const [co, setCo] = useState({ name: "", sector: "SaaS (India → global)", stage: "Seed", unit: "cr", currency: "₹", revenue: 0, ebitda: 0 });
+  const [team, setTeam] = useState([
+    { id: uid(), name: "", pct: 60, group: "Founders" },
+    { id: uid(), name: "", pct: 40, group: "Founders" },
+  ]);
+  const [rounds, setRounds] = useState([]);
+  const [exit, setExit] = useState({ value: 0, date: (new Date().getFullYear() + 4) + "-03-31" });
+
+  const validTeam = team.filter(t => t.name.trim() && t.pct > 0);
+  const totalPct = validTeam.reduce((a, t) => a + t.pct, 0);
+  const canNext = step === 0 ? co.name.trim().length > 0 : step === 1 ? validTeam.length > 0 : true;
+
+  const setT = (i, patch) => setTeam(team.map((x, j) => j === i ? { ...x, ...patch } : x));
+  const setR = (i, patch) => setRounds(rounds.map((x, j) => j === i ? { ...x, ...patch } : x));
+  const addRound = kind => setRounds([...rounds, {
+    id: uid(), kind, name: kind === "safe" ? "SAFE" : rounds.length === 0 ? "Seed" : "Series " + "ABCDE"[Math.min(4, rounds.length - 1)],
+    date: new Date().toISOString().slice(0, 10), val: 0, amount: 0, investor: "", esop: 0,
+  }]);
+
+  const build = () => {
+    const founders = validTeam.map(t => ({ id: uid(), name: t.name.trim(), shares: Math.round(t.pct * 100000), group: t.group }));
+    const events = rounds.filter(r => r.amount > 0 && r.val > 0).map(r => r.kind === "safe"
+      ? { id: uid(), kind: "safe", name: r.name || "SAFE", date: r.date, investor: r.investor || "Investor", amount: r.amount, capType: "post", cap: r.val, discount: 0 }
+      : { id: uid(), kind: "priced", name: r.name || "Round", date: r.date, preMoney: r.val, esopTarget: (r.esop || 0) / 100, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 0, investments: [{ investor: r.investor || "Investor", amount: r.amount }], secondaries: [] });
+    const priced = events.filter(e => e.kind === "priced");
+    const lastPost = priced.length ? (priced[priced.length - 1].preMoney + priced[priced.length - 1].investments[0].amount) : 0;
+    const isCr = co.unit === "cr";
+    const exitVal = exit.value > 0 ? exit.value
+      : Math.max(lastPost * 3, (co.revenue || 0) * 10, isCr ? 100 : 20000000);
+    onDone({
+      isExample: false,
+      company: co, founders, events,
+      exit: { value: Math.round(exitVal), date: exit.date },
+      scenarios: {
+        rounds: ["Next round", "Round after"],
+        cases: [
+          { name: "Best case", dil: [0.15, 0.12] },
+          { name: "Base case", dil: [0.22, 0.18] },
+          { name: "Heavy dilution", dil: [0.35, 0.25] },
+        ],
+      },
+    });
+  };
+
+  const STEP_TITLES = ["Your company", "Founding team", "Funding so far", "Exit assumption"];
+  return (
+    <div className="wizard">
+      <div className="panel">
+        <div className="wizard-steps">
+          {STEP_TITLES.map((t, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span className="bar"></span>}
+              <span className={"dot " + (i === step ? "on" : i < step ? "done" : "")}>{i + 1}</span>
+            </React.Fragment>
+          ))}
+        </div>
+        <h2>{STEP_TITLES[step]}</h2>
+
+        {step === 0 && <div>
+          <p className="lede">Tell us who you are — the dashboard, benchmarks and scenarios are built around this.</p>
+          <div className="frow">
+            <div><label className="f">Company name</label>
+              <input value={co.name} autoFocus placeholder="e.g. Lumafin" onChange={e => setCo({ ...co, name: e.target.value })} style={{ width: 200 }} /></div>
+            <div><label className="f">Sector</label>
+              <SectorSelect value={co.sector} onChange={v => setCo({ ...co, sector: v })} /></div>
+            <div><label className="f">Current stage</label>
+              <select value={co.stage} onChange={e => setCo({ ...co, stage: e.target.value })}>
+                {STAGES.map(s => <option key={s}>{s}</option>)}
+              </select></div>
+          </div>
+          <div className="frow" style={{ marginTop: 12 }}>
+            <div><label className="f">Units</label>
+              <select value={co.unit === "cr" ? "cr" : co.currency}
+                onChange={e => { const v = e.target.value; setCo({ ...co, unit: v === "cr" ? "cr" : "abs", currency: v === "cr" ? "₹" : v }); }}>
+                <option value="cr">₹ Cr</option><option value="$">$ (absolute)</option>
+                <option value="€">€ (absolute)</option><option value="£">£ (absolute)</option>
+              </select></div>
+            <div><label className="f">Annual revenue ({co.unit === "cr" ? "₹ Cr" : co.currency})</label>
+              <NumInput value={co.revenue} onChange={v => setCo({ ...co, revenue: v })} style={{ width: 120 }} /></div>
+          </div>
+        </div>}
+
+        {step === 1 && <div>
+          <p className="lede">Founders and angels on day zero, with their equity split. Stakes are relative — they'll be normalized to 100%.</p>
+          {team.map((t, i) => (
+            <div key={t.id} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <input value={t.name} placeholder={t.group === "Angels" ? "Angel name" : "Founder name"}
+                onChange={e => setT(i, { name: e.target.value })} style={{ flex: "1 1 150px", maxWidth: 210 }} />
+              <select value={t.group} onChange={e => setT(i, { group: e.target.value })}>
+                <option value="Founders">Founder</option><option value="Angels">Angel</option>
+              </select>
+              <NumInput value={t.pct} onChange={v => setT(i, { pct: v })} style={{ width: 65 }} />
+              <span className="hint" style={{ margin: 0 }}>%</span>
+              <button className="btn sm danger" onClick={() => setTeam(team.filter((_, j) => j !== i))}>×</button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+            <button className="btn sm" onClick={() => setTeam([...team, { id: uid(), name: "", pct: 10, group: "Founders" }])}>+ Add person</button>
+            <span className="hint" style={{ margin: 0 }}>Entered so far: {totalPct}%</span>
+          </div>
+        </div>}
+
+        {step === 2 && <div>
+          <p className="lede">Rounds you've already closed, oldest first. Skip this if you haven't raised yet — you can add SAFEs, ESOP top-ups and secondaries in full detail later.</p>
+          {rounds.map((r, i) => (
+            <div key={r.id} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
+                <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
+              <div><label className="f">Date</label>
+                <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
+              <div><label className="f">{r.kind === "safe" ? "Val. cap" : "Pre-money"}</label>
+                <NumInput value={r.val} onChange={v => setR(i, { val: v })} style={{ width: 90 }} /></div>
+              <div><label className="f">Raised</label>
+                <NumInput value={r.amount} onChange={v => setR(i, { amount: v })} style={{ width: 85 }} /></div>
+              <div><label className="f">Lead investor</label>
+                <input value={r.investor} onChange={e => setR(i, { investor: e.target.value })} style={{ width: 130 }} /></div>
+              {r.kind === "priced" && <div><label className="f">ESOP %</label>
+                <NumInput value={r.esop} onChange={v => setR(i, { esop: v })} style={{ width: 60 }} /></div>}
+              <button className="btn sm danger" onClick={() => setRounds(rounds.filter((_, j) => j !== i))}>×</button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn sm" onClick={() => addRound("priced")}>+ Priced round</button>
+            <button className="btn sm" onClick={() => addRound("safe")}>+ SAFE / note</button>
+          </div>
+        </div>}
+
+        {step === 3 && <div>
+          <p className="lede">A working exit assumption for the waterfall, MOIC and IRR views — you'll drag it around freely on the dashboard. Leave the value at 0 and we'll pick a sensible starting point.</p>
+          <div className="frow">
+            <div><label className="f">Exit value ({co.unit === "cr" ? "₹ Cr" : co.currency})</label>
+              <NumInput value={exit.value} onChange={v => setExit({ ...exit, value: v })} style={{ width: 130 }} /></div>
+            <div><label className="f">Exit date</label>
+              <input type="date" value={exit.date} onChange={e => setExit({ ...exit, date: e.target.value })} /></div>
+          </div>
+          <p className="hint" style={{ marginTop: 14 }}>
+            Building for <b>{co.name || "your company"}</b> · {co.sector} · {co.stage} · {validTeam.length} founding shareholder{validTeam.length === 1 ? "" : "s"} · {rounds.filter(r => r.amount > 0).length} round{rounds.filter(r => r.amount > 0).length === 1 ? "" : "s"}.
+          </p>
+        </div>}
+
+        <div className="wizard-nav">
+          <div>
+            {step > 0 && <button className="btn" onClick={() => setStep(step - 1)}>← Back</button>}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {step === 0 && <button className="ghost-link" onClick={onExample}>Explore the sample scenario instead</button>}
+            {step === 0 && onCancel && <button className="ghost-link" onClick={onCancel}>Back to dashboard</button>}
+            {step < 3
+              ? <button className="btn primary" disabled={!canNext} style={!canNext ? { opacity: 0.5, cursor: "default" } : null} onClick={() => canNext && setStep(step + 1)}>Next →</button>
+              : <button className="btn primary" onClick={build}>Build my dashboard</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================
+   APP
+================================================================ */
+let HAD_DRAFT = false;
+function App() {
+  const [state, setState] = useState(() => {
+    try {
+      const draft = localStorage.getItem("ledgerline-draft-v2");
+      if (draft) { const parsed = JSON.parse(draft); HAD_DRAFT = true; return parsed; }
+    } catch (e) {}
+    return SEED;
+  });
+  const [mode, setMode] = useState(HAD_DRAFT ? "dash" : "wizard");
+  const [tab, setTab] = useState("captable");
+  const [toast, setToast] = useState(null);
+  const [caps, setCaps] = useState({ artifact: undefined, downloads: undefined });
+  const bootRef = useRef(false);
+
+  useEffect(() => {
+    if (bootRef.current) return; bootRef.current = true;
+    (async () => {
+      try {
+        const r = await fetch("data/state.json", { cache: "no-store" });
+        if (r.ok) {
+          const saved = await r.json();
+          if (saved && saved.company) { setState(saved); setMode("dash"); }
+        }
+      } catch (e) {}
+      if (window.claude && window.claude.use) {
+        claude.use("artifact").then(ns => setCaps(c => ({ ...c, artifact: ns })));
+        claude.use("downloads").then(ns => setCaps(c => ({ ...c, downloads: ns })));
+      } else {
+        setCaps({ artifact: null, downloads: null });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("ledgerline-draft-v2", JSON.stringify(state)); } catch (e) {}
+  }, [state]);
+
+  const flash = msg => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+
+  const saveScenario = async () => {
+    if (!caps.artifact) { flash("Saved on this device (shared saving unavailable here)"); return; }
+    try {
+      await caps.artifact.publish({ "data/state.json": JSON.stringify({ ...state, isExample: false }) });
+      flash("Scenario saved to this artifact");
+    } catch (err) {
+      if (err && err.code === "conflict") flash("Someone saved a newer version — reloading");
+      else flash("Saved on this device only (" + ((err && err.code) || "publish unavailable") + ")");
+    }
+  };
+
+  // set money mode for all formatters this render
+  MONEY = state.company.unit === "cr" ? { sym: "₹", unit: "cr" } : { sym: state.company.currency || "$", unit: "abs" };
+
+  const cap = useMemo(() => computeCapTable(state), [state]);
+  const wf = useMemo(() => computeWaterfall(cap, state.exit.value || 0), [cap, state.exit.value]);
+
+  const allPos = [...cap.positions, cap.esopPos];
+  const FD = allPos.reduce((a, p) => a + p.shares, 0);
+  const primaryRaised = cap.positions.filter(p => !p.secondary).reduce((a, p) => a + p.invested, 0);
+  const lastPriced = [...cap.snapshots].reverse().find(s => s.postMoney);
+  const foundersShares = allPos.filter(p => p.group === "Founders").reduce((a, p) => a + p.shares, 0);
+  const foundersPct = FD > 0 ? foundersShares / FD : null;
+
+  const sectorData = SECTORS[state.company.sector] || INDIA_SECTORS["SaaS (India → global)"];
+  const stage = STAGES.includes(state.company.stage) ? state.company.stage : "Series C+";
+  const stageRow = sectorData.stages ? sectorData.stages[stage] : null;
+  const multBand = stageRow ? stageRow.mult : (sectorData.evRev || null);
+  const multLabel = sectorData.basis || sectorData.evRevLabel || "EV / Revenue";
+  const [loM, medM, hiM] = multBand || [0, 0, 0];
+  const impliedLow = multBand ? state.company.revenue * loM : (stageRow ? stageRow.post[0] : 0);
+  const impliedHigh = multBand ? state.company.revenue * hiM : (stageRow ? stageRow.post[2] : 0);
+
+  // Round economics
+  const roundEcon = useMemo(() => {
+    const priced = sortedEvents(state).filter(e => e.kind === "priced");
+    let prevPost = null;
+    return priced.map(ev => {
+      const raise = (ev.investments || []).reduce((a, i) => a + (i.amount || 0), 0);
+      const post = (ev.preMoney || 0) + raise;
+      const row = {
+        name: ev.name, date: ev.date, pre: ev.preMoney, raise, post,
+        dilution: post > 0 ? raise / post : null,
+        markup: prevPost > 0 ? ev.preMoney / prevPost : null,
+        revenue: ev.revenue || null,
+        pr: ev.revenue > 0 ? ev.preMoney / ev.revenue : null,
+      };
+      prevPost = post;
+      return row;
+    });
+  }, [state]);
+
+  // Returns per holder with capital in or out
+  const investors = useMemo(() => {
+    const map = new Map();
+    const ensure = name => {
+      if (!map.has(name)) map.set(name, { name, invested: 0, shares: 0, realized: 0, flows: [] });
+      return map.get(name);
+    };
+    cap.positions.filter(p => p.invested > 0).forEach(p => {
+      const inv = ensure(p.holder);
+      inv.invested += p.invested; inv.shares += p.shares;
+      inv.flows.push({ date: p.date, amount: -p.invested });
+    });
+    cap.realized.forEach(r => {
+      const inv = ensure(r.holder);
+      inv.realized += r.amount;
+      inv.flows.push({ date: r.date, amount: r.amount });
+    });
+    wf.rows.forEach(r => {
+      if (map.has(r.holder)) {
+        const inv = map.get(r.holder);
+        inv.atExit = (inv.atExit || 0) + r.proceeds;
+      }
+    });
+    return [...map.values()].map(inv => {
+      const total = inv.realized + (inv.atExit || 0);
+      const flows = [...inv.flows, { date: state.exit.date, amount: inv.atExit || 0 }];
+      return {
+        ...inv, total,
+        moic: inv.invested > 0 ? total / inv.invested : null,
+        irr: inv.invested > 0 ? xirr(flows) : null,
+      };
+    }).sort((a, b) => b.invested - a.invested);
+  }, [cap, wf, state.exit.date]);
+
+  const founderProceeds = wf.rows.filter(r => r.group === "Founders").reduce((a, r) => a + r.proceeds, 0);
+  const holderNames = [...new Set([...cap.positions.map(p => p.holder)])];
+
+  const exportCSV = async () => {
+    const u = unitLabel();
+    const lines = [["Holder", "Group", "Class", "Shares", "Fully diluted %", `Invested (${u})`, `Realized (${u})`, `Proceeds at exit (${u})`].join(",")];
+    allPos.filter(p => p.shares > 0.5 || p.invested > 0).forEach(p => {
+      const w = wf.rows.filter(r => r.holder === p.holder).reduce((a, r) => a + r.proceeds, 0);
+      const realized = cap.realized.filter(r => r.holder === p.holder).reduce((a, r) => a + r.amount, 0);
+      lines.push([`"${p.holder}"`, `"${p.group}"`, p.kind, Math.round(p.shares),
+        (p.shares / FD * 100).toFixed(2) + "%", p.invested || 0, realized, Math.round(w * 100) / 100].join(","));
+    });
+    const csv = lines.join("\n");
+    const filename = `${(state.company.name || "captable").replace(/\s+/g, "-")}-captable.csv`;
+    if (caps.downloads) {
+      try { await caps.downloads.save({ filename, data: csv }); }
+      catch (e) { if (e && e.code !== "declined") flash("Export unavailable here"); }
+    } else {
+      // standalone hosting: plain browser download
+      try {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      } catch (e) { flash("Export unavailable in this view"); }
+    }
+  };
+
+  const setEvent = (id, next) => setState(s => ({ ...s, events: s.events.map(e => e.id === id ? next : e) }));
+  const delEvent = id => setState(s => ({ ...s, events: s.events.filter(e => e.id !== id) }));
+  const addSafe = () => setState(s => ({
+    ...s, events: [...s.events, {
+      id: uid(), kind: "safe", name: "New SAFE", date: new Date().toISOString().slice(0, 10),
+      investor: "", amount: MONEY.unit === "cr" ? 2 : 500000, capType: "post",
+      cap: MONEY.unit === "cr" ? 40 : 8000000, discount: 0.2,
+    }]
+  }));
+  const addPriced = () => setState(s => ({
+    ...s, events: [...s.events, {
+      id: uid(), kind: "priced", name: "New round", date: new Date().toISOString().slice(0, 10),
+      preMoney: MONEY.unit === "cr" ? 100 : 20000000, esopTarget: 0, esopTiming: "post",
+      prefMultiple: 1, participating: false, revenue: 0,
+      investments: [{ investor: "", amount: MONEY.unit === "cr" ? 25 : 4000000 }], secondaries: [],
+    }]
+  }));
+
+  // Scenario planning
+  const scen = state.scenarios || { rounds: [], cases: [] };
+  const setScen = patch => setState(s => ({ ...s, scenarios: { ...scen, ...patch } }));
+
+  const sliderMax = Math.max(state.exit.value || 0, lastPriced ? lastPriced.postMoney * 8 : 0, primaryRaised * 4, MONEY.unit === "cr" ? 100 : 5e7);
+  const sliderStep = Math.max(MONEY.unit === "cr" ? 1 : 1e6, Math.round(sliderMax / 400));
+
+  const TABS = [
+    ["captable", "Cap table"], ["rounds", "Rounds"], ["exit", "Exit waterfall"],
+    ["returns", "Returns"], ["scenarios", "Scenarios"], ["valuation", "Valuation"],
+  ];
+
+  if (mode === "wizard") {
+    return (
+      <div className="shell">
+        <header className="masthead">
+          <div>
+            <h1 className="wordmark">Ledger<em>line</em></h1>
+            <div className="tagline">Cap table · dilution · exit math · valuation context</div>
+          </div>
+        </header>
+        <SetupWizard
+          onDone={ns => { setState(ns); setMode("dash"); setTab("captable"); flash("Dashboard built — hit Save scenario to keep it on this link"); }}
+          onExample={() => { setState({ ...SEED }); setMode("dash"); }}
+          onCancel={HAD_DRAFT ? () => setMode("dash") : null}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="shell">
+      <header className="masthead">
+        <div>
+          <h1 className="wordmark">Ledger<em>line</em></h1>
+          <div className="tagline">Cap table · dilution · exit math · valuation context</div>
+        </div>
+        <div className="mast-actions">
+          <button className="btn" onClick={() => setMode("wizard")}>New company</button>
+          <button className="btn" onClick={exportCSV}>Export CSV</button>
+          <button className="btn primary" onClick={saveScenario}>Save scenario</button>
+        </div>
+      </header>
+
+      <div className="stat-strip">
+        <div className="stat"><div className="lbl">Founders own</div>
+          <div className="val">{fmtPct(foundersPct)}</div>
+          <div className="sub">fully diluted</div></div>
+        <div className="stat"><div className="lbl">Primary raised</div>
+          <div className="val">{fmtMoney(primaryRaised)}</div>
+          <div className="sub">into the company</div></div>
+        <div className="stat"><div className="lbl">Last post-money</div>
+          <div className="val">{lastPriced ? fmtMoney(lastPriced.postMoney) : "—"}</div>
+          <div className="sub">{lastPriced ? lastPriced.label : "no priced round"}</div></div>
+        <div className="stat"><div className="lbl">Last round P/R</div>
+          <div className="val">{(() => { const r = roundEcon[roundEcon.length - 1]; return r && r.pr ? fmtX(r.pr) : "—"; })()}</div>
+          <div className="sub">pre-money / revenue</div></div>
+        <div className="stat"><div className="lbl">Indicative EV band</div>
+          <div className="val">{fmtMoney(impliedLow, 0)}–{fmtMoney(impliedHigh, 0)}</div>
+          <div className="sub">{multBand ? `${stage} · ${loM}–${hiM}× rev` : `${stage} · typical post-money`}</div></div>
+      </div>
+
+      {state.isExample && (
+        <div className="example-flag">
+          <span><b>Example scenario</b> seeded from your Sample Cap Table.xlsx — all figures in ₹ Cr. Edit everything on the Rounds tab.</span>
+          <button className="btn sm" onClick={() => setState(s => ({ ...s, isExample: false }))}>Dismiss</button>
+        </div>
+      )}
+      {cap.errors.length > 0 && (
+        <div className="example-flag" style={{ color: "var(--bad)", background: "var(--warn-soft)" }}>
+          <span>⚠ {cap.errors.join(" · ")}</span>
+        </div>
+      )}
+
+      <nav className="tabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </nav>
+
+      {/* ============ CAP TABLE ============ */}
+      {tab === "captable" && (
+        <section>
+          <h2 className="section serif">Who owns {state.company.name} today</h2>
+          <p className="section-note">Fully diluted view — every issued share, converted instrument, and the full option pool.</p>
+          <div className="panel">
+            <p className="chart-title">Fully diluted ownership</p>
+            <OwnershipBar cap={cap} />
+          </div>
+          <div className="panel">
+            <p className="chart-title">The dilution story</p>
+            <p className="chart-sub">Ownership by holder group after each financing event (* = instrument signed, not yet converted)</p>
+            <DilutionArea cap={cap} />
+          </div>
+          <div className="panel">
+            <p className="chart-title">Register</p>
+            <div className="twrap">
+              <table>
+                <thead><tr>
+                  <th>Holder</th><th>Group</th><th>Class</th>
+                  <th className="num">Shares</th><th className="num">FD %</th>
+                  <th className="num">Invested</th>
+                </tr></thead>
+                <tbody>
+                  {allPos.filter(p => p.shares > 0.5).map((p, i) => (
+                    <tr key={i}>
+                      <td><span className="swatch" style={{ background: slotColor(cap.groups, p.group) }}></span>{p.holder}{p.secondary ? <span className="pill" style={{ marginLeft: 6 }}>secondary</span> : null}</td>
+                      <td><span className="pill">{p.group}</span></td>
+                      <td>{p.kind === "common" ? "Common" : `Preferred${p.participating ? " (part.)" : ""}`}</td>
+                      <td className="num">{fmtShares(p.shares)}</td>
+                      <td className="num">{fmtPct(p.shares / FD)}</td>
+                      <td className="num">{p.invested ? fmtMoney(p.invested) : "—"}</td>
+                    </tr>
+                  ))}
+                  <tr className="total">
+                    <td colSpan="3">Total</td>
+                    <td className="num">{fmtShares(FD)}</td>
+                    <td className="num">100.0%</td>
+                    <td className="num">{fmtMoney(cap.positions.reduce((a, p) => a + p.invested, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="footnote">Conventions: dilution = round size ÷ post-money; ESOP top-ups can be created post-round (diluting everyone, your spreadsheet's convention) or pre-money (diluting only existing holders, the US term-sheet default); SAFEs convert at the next priced round; secondaries transfer existing shares at the round's price per share.</p>
+        </section>
+      )}
+
+      {/* ============ ROUNDS ============ */}
+      {tab === "rounds" && (
+        <section>
+          <h2 className="section serif">Financing history</h2>
+          <p className="section-note">Edit anything — the whole model recomputes live. Events apply in date order.</p>
+
+          <div className="panel">
+            <h3>Company</h3>
+            <div className="frow" style={{ marginTop: 8 }}>
+              <div><label className="f">Name</label>
+                <input value={state.company.name} onChange={e => setState(s => ({ ...s, company: { ...s.company, name: e.target.value } }))} /></div>
+              <div><label className="f">Sector</label>
+                <SectorSelect value={state.company.sector} onChange={v => setState(s => ({ ...s, company: { ...s.company, sector: v } }))} /></div>
+              <div><label className="f">Stage</label>
+                <select value={stage} onChange={e => setState(s => ({ ...s, company: { ...s.company, stage: e.target.value } }))}>
+                  {STAGES.map(k => <option key={k}>{k}</option>)}
+                </select></div>
+              <div><label className="f">Units</label>
+                <select value={state.company.unit === "cr" ? "cr" : state.company.currency}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setState(s => ({ ...s, company: { ...s.company, unit: v === "cr" ? "cr" : "abs", currency: v === "cr" ? "₹" : v } }));
+                  }}>
+                  <option value="cr">₹ Cr</option><option value="$">$ (absolute)</option>
+                  <option value="€">€ (absolute)</option><option value="£">£ (absolute)</option>
+                </select></div>
+              <div><label className="f">Current revenue ({unitLabel()})</label>
+                <NumInput value={state.company.revenue} onChange={v => setState(s => ({ ...s, company: { ...s.company, revenue: v } }))} style={{ width: 110 }} /></div>
+              <div><label className="f">EBITDA ({unitLabel()})</label>
+                <NumInput value={state.company.ebitda} onChange={v => setState(s => ({ ...s, company: { ...s.company, ebitda: v } }))} style={{ width: 110 }} /></div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <h3>Founding shareholders</h3>
+            <p className="hint">Founders and angels on day zero. Share counts just set relative stakes — percentages drive everything.</p>
+            {state.founders.map((f, i) => (
+              <div key={f.id} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <input value={f.name} placeholder="Name"
+                  onChange={e => setState(s => ({ ...s, founders: s.founders.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))}
+                  style={{ flex: "1 1 160px", maxWidth: 220 }} />
+                <select value={f.group || "Founders"}
+                  onChange={e => setState(s => ({ ...s, founders: s.founders.map((x, j) => j === i ? { ...x, group: e.target.value } : x) }))}>
+                  <option value="Founders">Founder</option><option value="Angels">Angel</option>
+                </select>
+                <NumInput value={f.shares}
+                  onChange={v => setState(s => ({ ...s, founders: s.founders.map((x, j) => j === i ? { ...x, shares: v } : x) }))}
+                  style={{ width: 130 }} />
+                <span className="hint" style={{ margin: 0 }}>shares</span>
+                <button className="btn sm danger" onClick={() => setState(s => ({ ...s, founders: s.founders.filter((_, j) => j !== i) }))}>×</button>
+              </div>
+            ))}
+            <button className="btn sm" onClick={() => setState(s => ({ ...s, founders: [...s.founders, { id: uid(), name: "", shares: 1000000, group: "Founders" }] }))}>+ Add shareholder</button>
+          </div>
+
+          {sortedEvents(state).map(ev =>
+            ev.kind === "safe"
+              ? <SafeEditor key={ev.id} ev={ev} onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
+              : <PricedEditor key={ev.id} ev={ev} holderNames={holderNames} onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button className="btn" onClick={addSafe}>+ SAFE / note</button>
+            <button className="btn" onClick={addPriced}>+ Priced round</button>
+          </div>
+
+          <div className="panel" style={{ marginTop: 16 }}>
+            <h3>Round economics</h3>
+            <p className="hint">Step-up = this round's pre-money over the previous post-money. P/R = pre-money over revenue at the round.</p>
+            <div className="twrap">
+              <table>
+                <thead><tr>
+                  <th>Round</th><th>Date</th>
+                  <th className="num">Pre-money</th><th className="num">Raise</th><th className="num">Post-money</th>
+                  <th className="num">Dilution</th><th className="num">Step-up</th>
+                  <th className="num">Revenue</th><th className="num">P/R</th>
+                </tr></thead>
+                <tbody>
+                  {roundEcon.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.name}</td><td>{r.date}</td>
+                      <td className="num">{fmtMoney(r.pre)}</td>
+                      <td className="num">{fmtMoney(r.raise)}</td>
+                      <td className="num">{fmtMoney(r.post)}</td>
+                      <td className="num">{fmtPct(r.dilution)}</td>
+                      <td className="num">{r.markup ? fmtX(r.markup) : "—"}</td>
+                      <td className="num">{r.revenue ? fmtMoney(r.revenue) : "—"}</td>
+                      <td className="num">{r.pr ? fmtX(r.pr) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============ EXIT ============ */}
+      {tab === "exit" && (
+        <section>
+          <h2 className="section serif">If {state.company.name} sold tomorrow</h2>
+          <p className="section-note">Drag the exit value. The preference stack pays senior-first; each non-participating preferred takes the better of its preference and converting to common.</p>
+          <div className="panel">
+            <div className="exit-slider">
+              <span className="axis-t" style={{ color: "var(--muted)", fontSize: 12 }}>Exit value</span>
+              <input type="range" min={sliderStep} max={sliderMax} step={sliderStep} value={state.exit.value}
+                onChange={e => setState(s => ({ ...s, exit: { ...s.exit, value: +e.target.value } }))} />
+              <span className="exit-readout">{fmtMoney(state.exit.value)}</span>
+            </div>
+            <div className="frow" style={{ marginTop: 6 }}>
+              <div><label className="f">Exit date (for IRR)</label>
+                <input type="date" value={state.exit.date} onChange={e => setState(s => ({ ...s, exit: { ...s.exit, date: e.target.value } }))} /></div>
+              <div><label className="f">Exit value ({unitLabel()})</label>
+                <NumInput value={state.exit.value} onChange={v => setState(s => ({ ...s, exit: { ...s.exit, value: v } }))} style={{ width: 130 }} /></div>
+              <div style={{ justifyContent: "flex-end" }}>
+                <span className="pill accent">Founders take {fmtMoney(founderProceeds)} ({fmtPct(state.exit.value > 0 ? founderProceeds / state.exit.value : null, 0)} of proceeds)</span>
+              </div>
+            </div>
+          </div>
+          <div className="panel">
+            <p className="chart-title">Proceeds by holder</p>
+            <WaterfallChart wf={wf} cap={cap} />
+          </div>
+          <div className="panel">
+            <p className="chart-title">Distribution detail</p>
+            <div className="twrap">
+              <table>
+                <thead><tr>
+                  <th>Holder</th><th>Route</th>
+                  <th className="num">Shares</th><th className="num">Invested</th>
+                  <th className="num">Proceeds</th><th className="num">Multiple</th>
+                </tr></thead>
+                <tbody>
+                  {wf.rows.map((r, i) => (
+                    <tr key={i}>
+                      <td><span className="swatch" style={{ background: slotColor(cap.groups, r.group) }}></span>{r.holder}</td>
+                      <td><span className="pill">{r.route}</span></td>
+                      <td className="num">{fmtShares(r.shares)}</td>
+                      <td className="num">{r.invested ? fmtMoney(r.invested) : "—"}</td>
+                      <td className="num">{fmtMoney(r.proceeds)}</td>
+                      <td className="num">{r.invested > 0 ? fmtX(r.proceeds / r.invested) : "—"}</td>
+                    </tr>
+                  ))}
+                  <tr className="total">
+                    <td colSpan="4">Total distributed</td>
+                    <td className="num">{fmtMoney(wf.rows.reduce((a, r) => a + r.proceeds, 0))}</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============ RETURNS ============ */}
+      {tab === "returns" && (
+        <section>
+          <h2 className="section serif">What each backer makes</h2>
+          <p className="section-note">Realized (secondary sales) plus unrealized at the exit set on the Exit tab ({fmtMoney(state.exit.value)} on {state.exit.date}). IRR uses actual cash-flow dates — XIRR, same as your spreadsheet.</p>
+          <div className="panel">
+            <div className="twrap">
+              <table>
+                <thead><tr>
+                  <th>Investor</th><th className="num">Invested</th>
+                  <th className="num">Realized</th><th className="num">At exit</th><th className="num">Total</th>
+                  <th className="num">MOIC</th><th className="num">IRR</th>
+                </tr></thead>
+                <tbody>
+                  {investors.map((inv, i) => (
+                    <tr key={i}>
+                      <td>{inv.name}{inv.shares < 1 && inv.realized > 0 ? <span className="pill" style={{ marginLeft: 6 }}>exited</span> : null}</td>
+                      <td className="num">{fmtMoney(inv.invested)}</td>
+                      <td className="num">{inv.realized ? fmtMoney(inv.realized) : "—"}</td>
+                      <td className="num">{fmtMoney(inv.atExit || 0)}</td>
+                      <td className="num">{fmtMoney(inv.total)}</td>
+                      <td className="num"><span className={inv.moic >= 1 ? "delta-up" : "delta-down"}>{fmtX(inv.moic)}</span></td>
+                      <td className="num">{inv.irr == null ? "—" : <span className={inv.irr >= 0 ? "delta-up" : "delta-down"}>{fmtPct(inv.irr)}</span>}</td>
+                    </tr>
+                  ))}
+                  {investors.length === 0 && <tr><td colSpan="7" className="hint">No outside investors yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid2">
+            <div className="panel">
+              <h3>Capital efficiency</h3>
+              <p className="hint">Value created per unit of primary capital raised.</p>
+              <div className="twrap"><table><tbody>
+                <tr><td>Exit value / primary raised</td>
+                  <td className="num">{primaryRaised > 0 ? fmtX(state.exit.value / primaryRaised) : "—"}</td></tr>
+                <tr><td>Revenue / primary raised</td>
+                  <td className="num">{primaryRaised > 0 ? fmtX(state.company.revenue / primaryRaised) : "—"}</td></tr>
+                <tr><td>Implied exit EV / revenue</td>
+                  <td className="num">{state.company.revenue > 0 ? fmtX(state.exit.value / state.company.revenue) : "—"}</td></tr>
+              </tbody></table></div>
+            </div>
+            <div className="panel">
+              <h3>Sensitivity</h3>
+              <p className="hint">Founder proceeds and lead-investor MOIC at three exits.</p>
+              <div className="twrap">
+                <table>
+                  <thead><tr><th className="num">Exit</th><th className="num">Founders take</th><th className="num">{investors[0] ? investors[0].name + " MOIC" : "Lead MOIC"}</th></tr></thead>
+                  <tbody>
+                    {[0.5, 1, 2].map(mult => {
+                      const ev = state.exit.value * mult;
+                      const w2 = computeWaterfall(cap, ev);
+                      const fp = w2.rows.filter(r => r.group === "Founders").reduce((a, r) => a + r.proceeds, 0);
+                      const lead = investors[0];
+                      let leadMoic = null;
+                      if (lead) {
+                        const lp = w2.rows.filter(r => r.holder === lead.name).reduce((a, r) => a + r.proceeds, 0);
+                        leadMoic = lead.invested > 0 ? (lp + lead.realized) / lead.invested : null;
+                      }
+                      return (
+                        <tr key={mult}>
+                          <td className="num">{fmtMoney(ev)}{mult === 1 ? " (current)" : ""}</td>
+                          <td className="num">{fmtMoney(fp)}</td>
+                          <td className="num">{fmtX(leadMoic)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ============ SCENARIOS ============ */}
+      {tab === "scenarios" && (
+        <section>
+          <h2 className="section serif">How much do founders keep?</h2>
+          <p className="section-note">Future-round dilution planning, starting from today's founder stake of {fmtPct(foundersPct)}. Edit the dilution each case assumes per round.</p>
+          <div className="panel">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>Founder stake by scenario</h3>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn sm" onClick={() => setScen({
+                  rounds: [...scen.rounds, `Round ${scen.rounds.length + 1}`],
+                  cases: scen.cases.map(c => ({ ...c, dil: [...c.dil, 0.2] })),
+                })}>+ Add round</button>
+                {scen.rounds.length > 0 && <button className="btn sm danger" onClick={() => setScen({
+                  rounds: scen.rounds.slice(0, -1),
+                  cases: scen.cases.map(c => ({ ...c, dil: c.dil.slice(0, -1) })),
+                })}>− Remove last</button>}
+              </div>
+            </div>
+            <div className="twrap">
+              <table>
+                <thead><tr>
+                  <th>Case</th><th className="num">Today</th>
+                  {scen.rounds.map((r, i) => (
+                    <th key={i} className="num">
+                      <input value={r} onChange={e => setScen({ rounds: scen.rounds.map((x, j) => j === i ? e.target.value : x) })}
+                        style={{ width: 90, fontSize: 12, padding: "2px 6px", textAlign: "right" }} />
+                    </th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {scen.cases.map((c, ci) => {
+                    let stake = foundersPct || 0;
+                    return (
+                      <tr key={ci}>
+                        <td>
+                          <input value={c.name} onChange={e => setScen({ cases: scen.cases.map((x, j) => j === ci ? { ...x, name: e.target.value } : x) })}
+                            style={{ width: 130, fontSize: 13, padding: "3px 6px" }} />
+                        </td>
+                        <td className="num">{fmtPct(foundersPct)}</td>
+                        {c.dil.map((d, di) => {
+                          stake = stake * (1 - d);
+                          const cls = stake < 0.26 ? "below-block" : stake < 0.5 ? "below-control" : "";
+                          return (
+                            <td key={di} className={"num " + cls}>
+                              <div>{fmtPct(stake)}</div>
+                              <div style={{ marginTop: 2 }}>
+                                <NumInput value={Math.round(d * 100)}
+                                  onChange={v => setScen({
+                                    cases: scen.cases.map((x, j) => j === ci
+                                      ? { ...x, dil: x.dil.map((y, k) => k === di ? Math.min(0.9, Math.max(0, (v || 0) / 100)) : y) }
+                                      : x)
+                                  })}
+                                  style={{ width: 52, fontSize: 11, padding: "1px 4px" }} />
+                                <span className="hint" style={{ margin: "0 0 0 3px", fontSize: 10 }}>% dil</span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="legend" style={{ marginTop: 12 }}>
+              <span className="thresh"><span style={{ color: "var(--s2)", fontWeight: 700 }}>■</span> below 50% — ordinary-resolution control gone</span>
+              <span className="thresh"><span style={{ color: "var(--bad)", fontWeight: 700 }}>■</span> below 26% — can no longer block special resolutions</span>
+            </div>
+          </div>
+          <p className="footnote">Rule of thumb from your spreadsheet's scenarios sheet: a founding team that starts at 100% and takes typical dilution through Series E lands near 13%; heavy early dilution ("broken cap table") lands under 7%. Guard the Seed and Series A — later rounds can't undo them.</p>
+        </section>
+      )}
+
+      {/* ============ VALUATION ============ */}
+      {tab === "valuation" && (
+        <section>
+          <h2 className="section serif">Is the price defensible?</h2>
+          <p className="section-note">Indicative sector bands, public comps and precedent deals — late-2025 vintage, judgment calls rather than live quotes. Verify anything you put in front of an investor.</p>
+          <div className="panel">
+            <div className="frow" style={{ marginBottom: 12 }}>
+              <div><label className="f">Sector</label>
+                <SectorSelect value={state.company.sector} onChange={v => setState(s => ({ ...s, company: { ...s.company, sector: v } }))} /></div>
+              <div><label className="f">Stage</label>
+                <select value={stage} onChange={e => setState(s => ({ ...s, company: { ...s.company, stage: e.target.value } }))}>
+                  {STAGES.map(k => <option key={k}>{k}</option>)}
+                </select></div>
+              <div><label className="f">Revenue ({unitLabel()})</label>
+                <NumInput value={state.company.revenue} onChange={v => setState(s => ({ ...s, company: { ...s.company, revenue: v } }))} style={{ width: 120 }} /></div>
+            </div>
+            {sectorData.stages && (
+              <div style={{ marginBottom: 18 }}>
+                <p className="chart-title">Stage benchmarks — {state.company.sector}</p>
+                <p className="chart-sub">Typical India ranges, 2025–26 vintage (low–high, ₹ Cr)</p>
+                <div className="twrap">
+                  <table>
+                    <thead><tr>
+                      <th>Stage</th><th className="num">Typical round</th>
+                      <th className="num">Typical post-money</th><th className="num">{sectorData.basis} band</th>
+                    </tr></thead>
+                    <tbody>
+                      {STAGES.map(s => {
+                        const row = sectorData.stages[s];
+                        return (
+                          <tr key={s} className={s === stage ? "cur-stage" : ""}>
+                            <td>{s}{s === stage ? <span className="pill accent" style={{ marginLeft: 8 }}>you</span> : null}</td>
+                            <td className="num">{fmtCr(row.round[0])} – {fmtCr(row.round[2])}</td>
+                            <td className="num">{fmtCr(row.post[0])} – {fmtCr(row.post[2])}</td>
+                            <td className="num">{row.mult ? `${row.mult[0]}–${row.mult[2]}× (med ${row.mult[1]}×)` : "traction-driven"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {multBand ? (
+              <div>
+                <p className="chart-title">{multLabel} — {state.company.sector}{sectorData.stages ? ` · ${stage}` : ""}</p>
+                <MultipleRange sector={state.company.sector} band={multBand} company={state.company}
+                  impliedLow={impliedLow} impliedHigh={impliedHigh} />
+              </div>
+            ) : (
+              <p className="hint">At {stage}, pricing is traction- and team-driven rather than multiple-driven — anchor on the typical round and post-money bands above.</p>
+            )}
+            <p className="hint" style={{ maxWidth: "70ch" }}>{sectorData.note}</p>
+            {lastPriced && state.company.revenue > 0 && multBand && (
+              <p className="footnote" style={{ marginTop: 8 }}>
+                Your last post-money of <b className="mono">{fmtMoney(lastPriced.postMoney)}</b> implies{" "}
+                <b className="mono">{fmtX(lastPriced.postMoney / state.company.revenue)}</b> revenue —{" "}
+                {lastPriced.postMoney / state.company.revenue > hiM
+                  ? <span className="delta-down">above the indicative band; expect multiple-compression pressure at the next round.</span>
+                  : lastPriced.postMoney / state.company.revenue < loM
+                    ? <span className="delta-up">below the indicative band; there may be headroom.</span>
+                    : <span className="delta-up">inside the indicative band.</span>}
+              </p>
+            )}
+          </div>
+          <div className="grid2">
+            <div className="panel">
+              <h3>Indicative public comps</h3>
+              <p className="hint">{sectorData.stages ? "Listed Indian anchors — approximate revenue multiples" : "Approximate forward-revenue multiples (global, USD markets)"}</p>
+              <div className="twrap"><table>
+                <thead><tr><th>Company</th><th className="num">Multiple</th></tr></thead>
+                <tbody>{sectorData.comps.map(([n, m], i) => (
+                  <tr key={i}><td>{n}</td><td className="num">{m}</td></tr>
+                ))}</tbody>
+              </table></div>
+            </div>
+            <div className="panel">
+              <h3>Precedent transactions</h3>
+              <p className="hint">Notable deals in or near the sector</p>
+              <div className="twrap"><table>
+                <thead><tr><th>Deal</th><th className="num">Year</th><th className="num">Terms</th></tr></thead>
+                <tbody>{sectorData.deals.map(([d, y, t], i) => (
+                  <tr key={i}><td>{d}</td><td className="num">{y}</td><td className="num" style={{ whiteSpace: "normal" }}>{t}</td></tr>
+                ))}</tbody>
+              </table></div>
+            </div>
+          </div>
+          <p className="footnote">These bands compress and expand with the cycle — peak-2021 deals (marked) are context, not comps. A next-round price outside the band needs a story: growth rate, net retention, or category heat. Multiples are unitless, so they apply to ₹ Cr revenue the same as USD.</p>
+        </section>
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
