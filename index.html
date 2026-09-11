@@ -310,6 +310,8 @@ const SEED = {
    benchmarks. Judgment calls, not live quotes — verify before use.
 ================================================================ */
 const STAGES = ["Pre-seed", "Seed", "Series A", "Series B", "Series C+"];
+// Bumped by the weekly benchmark-refresh agent every Monday — keep the YYYY-MM-DD format.
+const BENCHMARKS_UPDATED = "2026-09-11";
 
 const INDIA_SECTORS = {
   "Fintech (India)": {
@@ -1453,8 +1455,8 @@ function App() {
       <div className="shell">
         <header className="masthead">
           <div>
-            <h1 className="wordmark">Ledger<em>line</em></h1>
-            <div className="tagline">Cap table · dilution · exit math · valuation context</div>
+            <h1 className="wordmark">Ledger<em>line</em> <span className="pill accent" style={{ verticalAlign: "middle", marginLeft: 4 }}>Beta</span></h1>
+            <div className="tagline">Cap table · dilution · exit math · valuation context · benchmarks refreshed weekly</div>
           </div>
         </header>
         <SetupWizard
@@ -1470,8 +1472,8 @@ function App() {
     <div className="shell">
       <header className="masthead">
         <div>
-          <h1 className="wordmark">Ledger<em>line</em></h1>
-          <div className="tagline">Cap table · dilution · exit math · valuation context</div>
+          <h1 className="wordmark">Ledger<em>line</em> <span className="pill accent" style={{ verticalAlign: "middle", marginLeft: 4 }}>Beta</span></h1>
+          <div className="tagline">Cap table · dilution · exit math · valuation context · benchmarks refreshed weekly</div>
         </div>
         <div className="mast-actions">
           <button className="btn" onClick={() => setMode("wizard")}>New company</button>
@@ -1874,7 +1876,7 @@ function App() {
       {tab === "valuation" && (
         <section>
           <h2 className="section serif">Is the price defensible?</h2>
-          <p className="section-note">Indicative sector bands, public comps and precedent deals — late-2025 vintage, judgment calls rather than live quotes. Verify anything you put in front of an investor.</p>
+          <p className="section-note">Indicative sector bands, public comps and precedent deals — judgment calls rather than live quotes, refreshed weekly (last: {BENCHMARKS_UPDATED}). Verify anything you put in front of an investor.</p>
           <div className="panel">
             <div className="frow" style={{ marginBottom: 12 }}>
               <div><label className="f">Sector</label>
