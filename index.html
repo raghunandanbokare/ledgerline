@@ -1258,16 +1258,21 @@ function SetupWizard({ onDone, onExample, onCancel }) {
    APP
 ================================================================ */
 let HAD_DRAFT = false;
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const IS_DEMO = URL_PARAMS.has("demo");
+const TAB_IDS = ["captable", "rounds", "exit", "returns", "scenarios", "valuation"];
+const TAB_PARAM = URL_PARAMS.get("tab");
 function App() {
   const [state, setState] = useState(() => {
+    if (IS_DEMO) return { ...SEED };
     try {
       const draft = localStorage.getItem("ledgerline-draft-v2");
       if (draft) { const parsed = JSON.parse(draft); HAD_DRAFT = true; return parsed; }
     } catch (e) {}
     return SEED;
   });
-  const [mode, setMode] = useState(HAD_DRAFT ? "dash" : "wizard");
-  const [tab, setTab] = useState("captable");
+  const [mode, setMode] = useState(IS_DEMO || HAD_DRAFT ? "dash" : "wizard");
+  const [tab, setTab] = useState(TAB_IDS.includes(TAB_PARAM) ? TAB_PARAM : "captable");
   const [toast, setToast] = useState(null);
   const [caps, setCaps] = useState({ artifact: undefined, downloads: undefined });
   const bootRef = useRef(false);
@@ -1275,7 +1280,7 @@ function App() {
   useEffect(() => {
     if (bootRef.current) return; bootRef.current = true;
     (async () => {
-      try {
+      if (!IS_DEMO) try {
         const r = await fetch("data/state.json", { cache: "no-store" });
         if (r.ok) {
           const saved = await r.json();
@@ -1292,6 +1297,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (IS_DEMO) return; // demo view must never clobber a visitor's own draft
     try { localStorage.setItem("ledgerline-draft-v2", JSON.stringify(state)); } catch (e) {}
   }, [state]);
 
