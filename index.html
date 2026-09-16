@@ -1260,10 +1260,10 @@ function PricedEditor({ ev, onChange, onDelete, holderNames, info, allotted }) {
           <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
             <input value={inv.investor} placeholder="Investor name"
               onChange={e => setInv(i, { investor: e.target.value })} style={{ flex: "1 1 160px", maxWidth: 230 }} />
-            <NumInput value={inv.amount} onChange={v => setInv(i, { amount: v })} style={{ width: 110 }} placeholder={`Amount (${unitLabel()})`} />
+            <NumInput value={inv.amount} onChange={v => setInv(i, { amount: v })} style={{ width: 110 }} placeholder="Amount" />
             {byPrice && <>
               <span className="hint" style={{ margin: 0 }}>or</span>
-              <NumInput value={inv.shares || 0} onChange={v => setInv(i, { shares: v })} style={{ width: 110 }} placeholder="Shares" />
+              <NumInput value={inv.shares || null} onChange={v => setInv(i, { shares: v })} style={{ width: 110 }} placeholder="Shares" />
               <span className="hint" style={{ margin: 0 }}>shares</span>
             </>}
             {allotted && allotted[inv.investor || "Investor"] > 0 &&
@@ -1477,7 +1477,7 @@ function SetupWizard({ onDone, onExample, onCancel }) {
                 <div><label className="f">Event</label>
                   <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 110 }} /></div>
                 <div><label className="f">Date</label>
-                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
+                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} style={{ width: 150 }} /></div>
                 <div><label className="f">Type</label>
                   <select value={r.splitType} onChange={e => setR(i, { splitType: e.target.value })}>
                     <option value="split">Split</option><option value="bonus">Bonus issue</option>
@@ -1499,7 +1499,7 @@ function SetupWizard({ onDone, onExample, onCancel }) {
                 <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
                   <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
                 <div><label className="f">Date</label>
-                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
+                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} style={{ width: 150 }} /></div>
                 {byShares && r.kind === "priced" && <div><label className="f">Priced by</label>
                   <select value={r.pricing} onChange={e => setR(i, { pricing: e.target.value })}>
                     <option value="pre">Pre-money</option><option value="price">Price / share</option>
@@ -1871,27 +1871,25 @@ function App() {
                 : "Only shares actually allotted — the option pool is reserved, not issued. Use this for filings and board resolutions."}
             </span>
           </div>
-          <div className="grid2">
-            <div className="panel">
-              <p className="chart-title">{basis === "fd" ? "Fully diluted ownership" : "Ownership of issued shares"}</p>
-              <OwnershipBar cap={cap} includePool={basis === "fd"} />
-            </div>
-            <div className="panel">
-              <p className="chart-title">Shares</p>
-              <div className="twrap"><table><tbody>
-                <tr><td>Issued &amp; paid-up</td><td className="num">{fmtShares(cap.issuedShares)}</td></tr>
-                <tr><td>Option pool (reserved, not issued)</td><td className="num">{fmtShares(cap.esopShares)}</td></tr>
-                <tr className="total"><td>Fully diluted</td><td className="num">{fmtShares(FD)}</td></tr>
-                {lastRound && <tr><td>Last price per share ({lastRound.name})</td><td className="num">{fmtAbs(lastRound.price)}</td></tr>}
-                {cap.faceValue > 0 && <>
-                  <tr><td>Face value</td><td className="num">{fmtFace(cap.faceValue)}</td></tr>
-                  <tr><td>Share capital (issued × face value)</td><td className="num">{fmtAbs(cap.shareCapital)}</td></tr>
-                  <tr><td>Securities premium received</td><td className="num">{fmtMoney(cap.premium)}</td></tr>
-                </>}
-              </tbody></table></div>
-              {!(cap.faceValue > 0) && <p className="hint">Add a face value on the Rounds tab to see share capital and securities premium.</p>}
-              {!state.company.wholeShares && <p className="hint">Share counts are exact (fractional). Switch to whole shares on the Rounds tab to allot like a real register.</p>}
-            </div>
+          <div className="panel">
+            <p className="chart-title">{basis === "fd" ? "Fully diluted ownership" : "Ownership of issued shares"}</p>
+            <OwnershipBar cap={cap} includePool={basis === "fd"} />
+          </div>
+          <div className="panel">
+            <p className="chart-title">Shares</p>
+            <div className="twrap"><table><tbody>
+              <tr><td>Issued &amp; paid-up</td><td className="num">{fmtShares(cap.issuedShares)}</td></tr>
+              <tr><td>Option pool (reserved, not issued)</td><td className="num">{fmtShares(cap.esopShares)}</td></tr>
+              <tr className="total"><td>Fully diluted</td><td className="num">{fmtShares(FD)}</td></tr>
+              {lastRound && <tr><td>Last price per share ({lastRound.name})</td><td className="num">{fmtAbs(lastRound.price)}</td></tr>}
+              {cap.faceValue > 0 && <>
+                <tr><td>Face value</td><td className="num">{fmtFace(cap.faceValue)}</td></tr>
+                <tr><td>Share capital (issued × face value)</td><td className="num">{fmtAbs(cap.shareCapital)}</td></tr>
+                <tr><td>Securities premium received</td><td className="num">{fmtMoney(cap.premium)}</td></tr>
+              </>}
+            </tbody></table></div>
+            {!(cap.faceValue > 0) && <p className="hint">Add a face value on the Rounds tab to see share capital and securities premium.</p>}
+            {!state.company.wholeShares && <p className="hint">Share counts are exact (fractional). Switch to whole shares on the Rounds tab to allot like a real register.</p>}
           </div>
           <div className="panel">
             <p className="chart-title">The dilution story</p>
