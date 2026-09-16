@@ -1196,18 +1196,28 @@ function SetupWizard({ onDone, onExample, onCancel }) {
 
   const setT = (i, patch) => setTeam(team.map((x, j) => j === i ? { ...x, ...patch } : x));
   const setR = (i, patch) => setRounds(rounds.map((x, j) => j === i ? { ...x, ...patch } : x));
+  const newInvestor = () => ({ id: uid(), name: "", amount: 0 });
+  const setRI = (i, k, patch) => setR(i, { investors: rounds[i].investors.map((x, j) => j === k ? { ...x, ...patch } : x) });
   const addRound = kind => setRounds([...rounds, {
     id: uid(), kind, name: kind === "safe" ? "SAFE" : rounds.length === 0 ? "Seed" : "Series " + "ABCDE"[Math.min(4, rounds.length - 1)],
     date: new Date().toISOString().slice(0, 10), val: 0, amount: 0, investor: "", esop: 0,
+    investors: kind === "safe" ? [] : [newInvestor()],
   }]);
+  // SAFEs hold one investor each; a priced round's size is the sum of its cheques
+  const roundAmount = r => r.kind === "safe" ? (r.amount || 0) : r.investors.reduce((a, x) => a + (x.amount || 0), 0);
+  const fundedRounds = rounds.filter(r => roundAmount(r) > 0);
+  const fmtW = v => co.unit === "cr" ? `₹${v.toLocaleString("en-IN")} Cr` : `${co.currency}${v.toLocaleString("en-US")}`;
 
   const build = () => {
     const founders = validTeam.map(t => ({ id: uid(), name: t.name.trim(), shares: Math.round(t.pct * 100000), group: t.group }));
-    const events = rounds.filter(r => r.amount > 0 && r.val > 0).map(r => r.kind === "safe"
+    const events = rounds.filter(r => roundAmount(r) > 0 && r.val > 0).map(r => r.kind === "safe"
       ? { id: uid(), kind: "safe", name: r.name || "SAFE", date: r.date, investor: r.investor || "Investor", amount: r.amount, capType: "post", cap: r.val, discount: 0 }
-      : { id: uid(), kind: "priced", name: r.name || "Round", date: r.date, preMoney: r.val, esopTarget: (r.esop || 0) / 100, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 0, investments: [{ investor: r.investor || "Investor", amount: r.amount }], secondaries: [] });
+      : { id: uid(), kind: "priced", name: r.name || "Round", date: r.date, preMoney: r.val, esopTarget: (r.esop || 0) / 100, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 0,
+          investments: r.investors.filter(x => x.amount > 0).map((x, k) => ({ investor: x.name.trim() || `${r.name || "Round"} investor ${k + 1}`, amount: x.amount })),
+          secondaries: [] });
     const priced = events.filter(e => e.kind === "priced");
-    const lastPost = priced.length ? (priced[priced.length - 1].preMoney + priced[priced.length - 1].investments[0].amount) : 0;
+    const lastRound = priced[priced.length - 1];
+    const lastPost = lastRound ? lastRound.preMoney + lastRound.investments.reduce((a, x) => a + x.amount, 0) : 0;
     const isCr = co.unit === "cr";
     const exitVal = exit.value > 0 ? exit.value
       : Math.max(lastPost * 3, (co.revenue || 0) * 10, isCr ? 100 : 20000000);
@@ -1265,7 +1275,8 @@ function SetupWizard({ onDone, onExample, onCancel }) {
         </div>}
 
         {step === 1 && <div>
-          <p className="lede">Founders and angels on day zero, with their equity split. Stakes are relative — they'll be normalized to 100%.</p>
+          <p className="lede">Enter each person's stake <b>at founding</b> — before any funding round, SAFE or ESOP pool. Don't enter today's diluted percentages: the next step replays each round and works out current stakes for you.</p>
+          <p className="hint">Example: two co-founders who split the company 60/40 on day one enter 60 and 40, even if they own less today. Angels who came in through a SAFE or priced round belong in the next step, not here. Stakes are normalized to 100%.</p>
           {team.map((t, i) => (
             <div key={t.id} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
               <input value={t.name} placeholder={t.group === "Angels" ? "Angel name" : "Founder name"}
@@ -1280,27 +1291,46 @@ function SetupWizard({ onDone, onExample, onCancel }) {
           ))}
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
             <button className="btn sm" onClick={() => setTeam([...team, { id: uid(), name: "", pct: 10, group: "Founders" }])}>+ Add person</button>
-            <span className="hint" style={{ margin: 0 }}>Entered so far: {totalPct}%</span>
+            <span className="hint" style={{ margin: 0 }}>Founding split entered: {totalPct}%{validTeam.length > 0 && totalPct !== 100 ? " — will be scaled to 100%" : ""}</span>
           </div>
         </div>}
 
         {step === 2 && <div>
-          <p className="lede">Rounds you've already closed, oldest first. Skip this if you haven't raised yet — you can add SAFEs, ESOP top-ups and secondaries in full detail later.</p>
+          <p className="lede">Rounds you've already closed, oldest first. Add every investor in a priced round with their cheque — the round size is the total. Skip this if you haven't raised yet; SAFE terms, ESOP timing and secondaries can be refined later.</p>
           {rounds.map((r, i) => (
-            <div key={r.id} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
-                <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
-              <div><label className="f">Date</label>
-                <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
-              <div><label className="f">{r.kind === "safe" ? "Val. cap" : "Pre-money"}</label>
-                <NumInput value={r.val} onChange={v => setR(i, { val: v })} style={{ width: 90 }} /></div>
-              <div><label className="f">Raised</label>
-                <NumInput value={r.amount} onChange={v => setR(i, { amount: v })} style={{ width: 85 }} /></div>
-              <div><label className="f">Lead investor</label>
-                <input value={r.investor} onChange={e => setR(i, { investor: e.target.value })} style={{ width: 130 }} /></div>
-              {r.kind === "priced" && <div><label className="f">ESOP %</label>
-                <NumInput value={r.esop} onChange={v => setR(i, { esop: v })} style={{ width: 60 }} /></div>}
-              <button className="btn sm danger" onClick={() => setRounds(rounds.filter((_, j) => j !== i))}>×</button>
+            <div key={r.id} style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
+                  <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
+                <div><label className="f">Date</label>
+                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
+                <div><label className="f">{r.kind === "safe" ? "Val. cap" : "Pre-money"}</label>
+                  <NumInput value={r.val} onChange={v => setR(i, { val: v })} style={{ width: 90 }} /></div>
+                {r.kind === "safe" ? <>
+                  <div><label className="f">Amount</label>
+                    <NumInput value={r.amount} onChange={v => setR(i, { amount: v })} style={{ width: 85 }} /></div>
+                  <div><label className="f">Investor</label>
+                    <input value={r.investor} onChange={e => setR(i, { investor: e.target.value })} style={{ width: 130 }} /></div>
+                </> : <div><label className="f">ESOP %</label>
+                  <NumInput value={r.esop} onChange={v => setR(i, { esop: v })} style={{ width: 60 }} /></div>}
+                <button className="btn sm danger" onClick={() => setRounds(rounds.filter((_, j) => j !== i))}>×</button>
+              </div>
+              {r.kind === "safe"
+                ? <p className="hint" style={{ margin: 0 }}>One investor per SAFE — add another SAFE for each additional holder.</p>
+                : <div style={{ paddingLeft: 16 }}>
+                  {r.investors.map((x, k) => (
+                    <div key={x.id} style={{ display: "flex", gap: 8, marginBottom: 4, alignItems: "center", flexWrap: "wrap" }}>
+                      <input value={x.name} placeholder={k === 0 ? "Lead investor" : "Co-investor"}
+                        onChange={e => setRI(i, k, { name: e.target.value })} style={{ width: 160 }} />
+                      <NumInput value={x.amount} placeholder="Amount" onChange={v => setRI(i, k, { amount: v })} style={{ width: 90 }} />
+                      {r.investors.length > 1 && <button className="btn sm danger" onClick={() => setR(i, { investors: r.investors.filter((_, j) => j !== k) })}>×</button>}
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+                    <button className="btn sm" onClick={() => setR(i, { investors: [...r.investors, newInvestor()] })}>+ Add investor</button>
+                    <span className="hint" style={{ margin: 0 }}>Round size: {roundAmount(r) > 0 ? fmtW(roundAmount(r)) : "—"}{r.val > 0 && roundAmount(r) > 0 ? ` · post-money ${fmtW(r.val + roundAmount(r))}` : ""}</span>
+                  </div>
+                </div>}
             </div>
           ))}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -1318,7 +1348,7 @@ function SetupWizard({ onDone, onExample, onCancel }) {
               <input type="date" value={exit.date} onChange={e => setExit({ ...exit, date: e.target.value })} /></div>
           </div>
           <p className="hint" style={{ marginTop: 14 }}>
-            Building for <b>{co.name || "your company"}</b> · {co.sector} · {co.stage} · {validTeam.length} founding shareholder{validTeam.length === 1 ? "" : "s"} · {rounds.filter(r => r.amount > 0).length} round{rounds.filter(r => r.amount > 0).length === 1 ? "" : "s"}.
+            Building for <b>{co.name || "your company"}</b> · {co.sector} · {co.stage} · {validTeam.length} founding shareholder{validTeam.length === 1 ? "" : "s"} · {fundedRounds.length} round{fundedRounds.length === 1 ? "" : "s"}, {fundedRounds.reduce((a, r) => a + (r.kind === "safe" ? 1 : r.investors.filter(x => x.amount > 0).length), 0)} investor cheques.
           </p>
         </div>}
 
@@ -1694,7 +1724,7 @@ function App() {
 
           <div className="panel">
             <h3>Founding shareholders</h3>
-            <p className="hint">Founders and angels on day zero. Share counts just set relative stakes — percentages drive everything.</p>
+            <p className="hint">Founders and angels on day zero, before any round. Share counts just set the founding split — later stakes are calculated from the rounds below.</p>
             {state.founders.map((f, i) => (
               <div key={f.id} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <input value={f.name} placeholder="Name"
