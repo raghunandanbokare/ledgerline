@@ -1497,12 +1497,12 @@ function SetupWizard({ onDone, onExample, onCancel }) {
             <div key={r.id} style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
-                  <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
+                  <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 80 }} /></div>
                 <div><label className="f">Date</label>
                   <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} style={{ width: 150 }} /></div>
                 {byShares && r.kind === "priced" && <div><label className="f">Priced by</label>
-                  <select value={r.pricing} onChange={e => setR(i, { pricing: e.target.value })}>
-                    <option value="pre">Pre-money</option><option value="price">Price / share</option>
+                  <select value={r.pricing} onChange={e => setR(i, { pricing: e.target.value })} style={{ width: 110 }}>
+                    <option value="pre">Pre-money</option><option value="price">Per share</option>
                   </select></div>}
                 <div><label className="f">{r.kind === "safe" ? "Val. cap" : byShares && r.pricing === "price" ? `Price / share (${sym})` : "Pre-money"}</label>
                   <NumInput value={r.val} onChange={v => setR(i, { val: v })} style={{ width: 90 }} /></div>
