@@ -382,6 +382,48 @@ const INDIA_SECTORS = {
       ["Flipkart / Walmart", "2018", "$16B for 77%"],
     ],
   },
+  "NBFCs & digital lending (India)": {
+    metrics: [
+      { key: "pb", label: "P / Book", driver: "bookValue", onBook: true },
+      { key: "pAum", label: "P / AUM", driver: "aum" },
+    ],
+    note: "Lenders are priced on net worth, not revenue: P/B is the anchor and P/AUM the cross-check. Bands price the pre-round book — new equity adds to book one-for-one, so the post-money P/B always reads lower. Asset quality, ROA and cost of funds decide where you sit; partner-funded (off-balance-sheet) lenders can clear the top of the band. ₹10 Cr net owned funds is the regulatory floor.",
+    compsNote: "Listed Indian lenders — P/B and market cap ÷ AUM",
+    stages: {
+      "Pre-seed": { round: [1, 3, 8], post: [8, 20, 40], mult: { pb: [1.5, 2.5, 4], pAum: null } },
+      "Seed": { round: [5, 15, 30], post: [30, 70, 150], mult: { pb: [1.5, 2.5, 4], pAum: [0.5, 1.5, 3] } },
+      "Series A": { round: [40, 90, 160], post: [200, 400, 800], mult: { pb: [1.2, 2, 3.5], pAum: [0.4, 0.8, 1.5] } },
+      "Series B": { round: [100, 250, 700], post: [600, 1500, 3500], mult: { pb: [1.3, 2.3, 4], pAum: [0.4, 0.9, 1.8] } },
+      "Series C+": { round: [250, 1000, 2800], post: [3000, 9000, 25000], mult: { pb: [1.3, 2.5, 5], pAum: [0.4, 1, 2.8] } },
+    },
+    comps: [["Bajaj Finance", "~5.4x P/B · ~1.1x AUM"], ["Cholamandalam", "~5x P/B · ~0.6x AUM"], ["Shriram Finance", "~3.5x P/B · ~0.7x AUM"], ["Five-Star Business Finance", "~2.2x P/B · ~1.2x AUM"], ["Home First", "~2.8x P/B · ~0.7x AUM"]],
+    deals: [
+      ["KreditBee Series E", "2026", "$280M @ $1.5B, ~1x AUM"],
+      ["OnEMI (Kissht) IPO", "2026", "₹2,881 Cr post, ~1.4x post-money book"],
+      ["Profectus / Ugro Capital", "2025", "₹1,400 Cr for 100%, ~1.2x book"],
+      ["DMI Finance / MUFG", "2024", "~$3B, ~2.6x post-money book"],
+    ],
+  },
+  "Small finance & digital banks (India)": {
+    metrics: [
+      { key: "pb", label: "P / Book", driver: "bookValue", onBook: true },
+    ],
+    note: "A small finance bank licence needs ₹200 Cr minimum paid-up capital, so there is no seed-stage entry. Priced on P/B against listed SFBs (median ~1.1x) and large private banks (~1.8–2.3x); deposit franchise, CASA share and asset quality move the multiple.",
+    compsNote: "Listed Indian banks — price / book value",
+    stages: {
+      "Pre-seed": null,
+      "Seed": null,
+      "Series A": { round: [100, 200, 400], post: [500, 1000, 2000], mult: { pb: [0.9, 1.4, 2.5] } },
+      "Series B": { round: [150, 400, 1000], post: [1000, 2500, 5000], mult: { pb: [1, 1.8, 3] } },
+      "Series C+": { round: [300, 950, 2000], post: [2000, 4300, 9000], mult: { pb: [1, 2, 4] } },
+    },
+    comps: [["AU Small Finance Bank", "~3.9x P/B"], ["Ujjivan SFB", "~1.8x P/B"], ["Equitas SFB", "~1.3x P/B"], ["Jana SFB", "~1.2x P/B"], ["HDFC Bank (anchor)", "~1.8x P/B"]],
+    deals: [
+      ["slice Small Finance Bank", "2026", "$100M @ ~$450M (down ~68%), ~2.4x post-money book"],
+      ["Unity SFB stake sale (sought)", "2025", "$800–900M ask, ~3.8x book — not closed"],
+      ["AU SFB / Fincare SFB merger", "2024", "all-share, ~₹4,416 Cr"],
+    ],
+  },
 };
 
 const GLOBAL_SECTORS = {
@@ -478,6 +520,23 @@ const GLOBAL_SECTORS = {
 };
 const SECTORS = { ...INDIA_SECTORS, ...GLOBAL_SECTORS };
 
+/* Valuation metrics. A sector may declare several in `metrics` (first = primary), with
+   stage bands keyed by metric: mult: { pb: [..], pAum: [..] }. Sectors with a single
+   `basis` + array `mult` read as one revenue metric. `onBook` bands price the pre-round
+   book, so new equity is added to book when showing the post-money multiple.
+   A stage set to null is not a meaningful entry point for that sector. */
+const DRIVERS = {
+  revenue: { label: "Revenue", short: "revenue" },
+  bookValue: { label: "Net worth (book value)", short: "book value" },
+  aum: { label: "AUM / loan book", short: "AUM" },
+};
+const metricsOf = s => s.metrics || [{ key: "rev", label: s.basis || s.evRevLabel || "EV / Revenue", driver: "revenue" }];
+const bandOf = (s, row, m) => {
+  if (!s.stages) return s.evRev || null;
+  if (!row || row.mult == null) return null;
+  return Array.isArray(row.mult) ? row.mult : (row.mult[m.key] || null);
+};
+
 /* ================================================================
    MONEY FORMATTING — unit-aware (INR Cr vs USD-style compact)
 ================================================================ */
@@ -514,9 +573,12 @@ function sortedEvents(state) {
 }
 
 /** Full cap table history.
- * positions: [{holder, group, kind, eventId, shares, invested, secondary, date,
+ * positions: [{holder, group, kind, eventId, shares, invested, prefBase, secondary, date,
  *              prefMultiple, participating, rank}]
- * realized:  [{holder, date, amount, note}]  — secondary sale proceeds
+ *   invested = holder's remaining cost basis; prefBase = original issue value the
+ *   liquidation preference is computed on (moves with the shares in a secondary).
+ * realized:  [{holder, date, amount, costs:[{date, amount}], note}]  — secondary sale
+ *   proceeds, with the cost basis of the shares sold (keeps IRR/MOIC on original cost)
  * snapshots: [{label, date, totals:{group:shares}, totalShares, price, postMoney}]
  */
 function computeCapTable(state) {
@@ -530,7 +592,7 @@ function computeCapTable(state) {
     if (!groupsBase.includes(g)) groupsBase.push(g);
     if (f.shares > 0) positions.push({
       holder: f.name || "Shareholder", group: g, kind: "common",
-      eventId: null, shares: f.shares, invested: 0, secondary: false, date: null,
+      eventId: null, shares: f.shares, invested: 0, prefBase: 0, secondary: false, date: null,
     });
   });
   if (!groupsBase.includes("Founders")) groupsBase.unshift("Founders");
@@ -576,7 +638,7 @@ function computeCapTable(state) {
     let safeShares = pendingSafes.map(() => 0);
     for (let iter = 0; iter < 60; iter++) {
       const totalSafe0 = safeShares.reduce((a, b) => a + b, 0);
-      const capBase = S_pre + poolAdd + totalSafe0; // post-money SAFE company capitalization
+      const capBase = S_pre + totalSafe0; // post-money SAFE capitalization — excludes this round's pool increase (YC definition)
       safeShares = pendingSafes.map(s => {
         const amt = s.amount || 0;
         let capSh = 0;
@@ -600,7 +662,7 @@ function computeCapTable(state) {
     pendingSafes.forEach((s, i) => {
       positions.push({
         holder: s.investor || s.name, group: s.name, kind: "preferred",
-        eventId: s.id, shares: safeShares[i], invested: s.amount || 0, secondary: false, date: s.date,
+        eventId: s.id, shares: safeShares[i], invested: s.amount || 0, prefBase: s.amount || 0, secondary: false, date: s.date,
         prefMultiple: 1, participating: false, rank,
       });
     });
@@ -611,7 +673,7 @@ function computeCapTable(state) {
       if (!(inv.amount > 0)) return;
       positions.push({
         holder: inv.investor || "Investor", group: ev.name, kind: "preferred",
-        eventId: ev.id, shares: price > 0 ? inv.amount / price : 0, invested: inv.amount, secondary: false, date: ev.date,
+        eventId: ev.id, shares: price > 0 ? inv.amount / price : 0, invested: inv.amount, prefBase: inv.amount, secondary: false, date: ev.date,
         prefMultiple: ev.prefMultiple || 1, participating: !!ev.participating, rank,
       });
     });
@@ -630,20 +692,27 @@ function computeCapTable(state) {
       const sellerPos = positions.filter(p => p.holder === sec.seller && p.shares > 0);
       if (!sellerPos.length) { errors.push(`${ev.name}: secondary seller "${sec.seller}" holds no shares at that date.`); return; }
       let totalValue = 0;
+      const costs = [];
       sellerPos.forEach(p => {
         const sold = p.shares * pct;
         if (sold <= 0) return;
+        const soldCost = (p.invested || 0) * pct;
+        const soldPref = (p.prefBase || 0) * pct;
         p.shares -= sold;
+        p.invested = (p.invested || 0) - soldCost;
+        p.prefBase = (p.prefBase || 0) - soldPref;
+        if (soldCost > 0) costs.push({ date: p.date, amount: soldCost });
         const value = sold * price;
         totalValue += value;
+        // Buyer steps into the same class: same seniority, same preference base
         positions.push({
           holder: sec.buyer || "Buyer", group: ev.name, kind: p.kind,
-          eventId: ev.id, shares: sold, invested: value, secondary: true, date: ev.date,
+          eventId: p.eventId, shares: sold, invested: value, prefBase: soldPref, secondary: true, date: ev.date,
           prefMultiple: p.prefMultiple, participating: p.participating, rank: p.rank,
         });
       });
       if (totalValue > 0) realized.push({
-        holder: sec.seller, date: ev.date, amount: totalValue,
+        holder: sec.seller, date: ev.date, amount: totalValue, costs,
         note: `Sold ${fmtPct(pct, 0)} of stake at ${ev.name}`,
       });
     });
@@ -652,7 +721,7 @@ function computeCapTable(state) {
     snapshots.push(snapAt(ev.name, ev.date, price, preMoney + totalNew));
   });
 
-  const esopPos = { holder: "Option pool (ESOP)", group: "ESOP", kind: "common", eventId: null, shares: esopShares, invested: 0, secondary: false, date: null };
+  const esopPos = { holder: "Option pool (ESOP)", group: "ESOP", kind: "common", eventId: null, shares: esopShares, invested: 0, prefBase: 0, secondary: false, date: null };
   return { snapshots, positions, esopShares, esopPos, groups, errors, realized };
 }
 
@@ -665,10 +734,10 @@ function computeWaterfall(cap, exitValue) {
     const key = p.eventId + "|" + p.rank + "|" + (p.prefMultiple || 1) + "|" + (p.participating ? 1 : 0);
     if (!classes.has(key)) classes.set(key, {
       key, rank: p.rank, prefMultiple: p.prefMultiple || 1, participating: !!p.participating,
-      shares: 0, invested: 0, positions: [],
+      shares: 0, prefBase: 0, positions: [],
     });
     const c = classes.get(key);
-    c.shares += p.shares; c.invested += p.invested; c.positions.push(p);
+    c.shares += p.shares; c.prefBase += p.prefBase || 0; c.positions.push(p);
   });
   const clsList = [...classes.values()].sort((a, b) => b.rank - a.rank);
   const commonPos = allPos.filter(p => p.kind === "common");
@@ -684,7 +753,7 @@ function computeWaterfall(cap, exitValue) {
     clsList.forEach(c => {
       classPay[c.key] = 0;
       if (choice[c.key] === "pref" || choice[c.key] === "part") {
-        const pref = Math.min(remaining, c.prefMultiple * c.invested);
+        const pref = Math.min(remaining, c.prefMultiple * c.prefBase);
         classPay[c.key] += pref; remaining -= pref;
       }
     });
@@ -744,7 +813,7 @@ function xirr(flows) {
   if (fl.length < 2) return null;
   if (!fl.some(f => f.a < 0) || !fl.some(f => f.a > 0)) return null;
   const t0 = Math.min(...fl.map(f => f.t));
-  const yrs = f => (f.t - t0) / (365.25 * 24 * 3600 * 1000);
+  const yrs = f => (f.t - t0) / (365 * 24 * 3600 * 1000); // Excel XIRR day count
   if (Math.max(...fl.map(yrs)) < 0.02) return null; // flows too close together for a meaningful IRR
   const npv = r => fl.reduce((a, f) => a + f.a / Math.pow(1 + r, yrs(f)), 0);
   let lo = -0.9999, hi = 100;
@@ -931,10 +1000,14 @@ function WaterfallChart({ wf, cap }) {
   );
 }
 
-function MultipleRange({ sector, band, company, impliedLow, impliedHigh }) {
+function MultipleRange({ sector, band, metric, companyName, driverValue, raise = 0 }) {
   const tt = useTooltip();
   const [lo, med, hi] = band;
-  const axMax = Math.ceil(hi * 1.25);
+  const axMax = hi * 1.25 >= 4 ? Math.ceil(hi * 1.25) : Math.ceil(hi * 1.25 * 10) / 10;
+  const tick = v => Math.round(v * 100) / 100;
+  const driver = DRIVERS[metric.driver];
+  const valueWord = metric.driver === "revenue" ? "EV" : metric.onBook ? "pre-money" : "equity value";
+  const postBook = driverValue + raise;
   const W = 900, H = 96, padL = 14, padR = 14, y = 40;
   const xOf = v => padL + (v / axMax) * (W - padL - padR);
   return (
@@ -942,8 +1015,8 @@ function MultipleRange({ sector, band, company, impliedLow, impliedHigh }) {
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
         aria-label={`${sector} multiple range`}>
         <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="var(--grid)" strokeWidth="2" />
-        {[0, Math.round(axMax / 2), axMax].map(v => (
-          <g key={v}>
+        {[0, tick(axMax / 2), axMax].map((v, i) => (
+          <g key={i}>
             <line x1={xOf(v)} x2={xOf(v)} y1={y - 5} y2={y + 5} stroke="var(--baseline)" strokeWidth="1" />
             <text x={xOf(v)} y={y + 24} textAnchor="middle" className="axis-t">{v}×</text>
           </g>
@@ -959,11 +1032,21 @@ function MultipleRange({ sector, band, company, impliedLow, impliedHigh }) {
         <text x={xOf(lo)} y={y + 24} textAnchor="middle" className="axis-t">{lo}×</text>
         <text x={xOf(hi)} y={y + 24} textAnchor="middle" className="axis-t">{hi}×</text>
       </svg>
-      <p className="hint" style={{ marginTop: 4 }}>
-        Applied to {company.name}'s revenue of {fmtMoney(company.revenue)}: indicative EV of{" "}
-        <b className="mono">{fmtMoney(impliedLow)}</b> – <b className="mono">{fmtMoney(impliedHigh)}</b>{" "}
-        (median {fmtMoney(company.revenue * med)}).
-      </p>
+      {driverValue > 0 ? (
+        <p className="hint" style={{ marginTop: 4 }}>
+          Applied to {companyName}'s {driver.short}{metric.onBook ? " before the round" : ""} of {fmtMoney(driverValue)}: indicative {valueWord} of{" "}
+          <b className="mono">{fmtMoney(driverValue * lo)}</b> – <b className="mono">{fmtMoney(driverValue * hi)}</b>{" "}
+          (median {fmtMoney(driverValue * med)}).
+          {metric.onBook && raise > 0 && <>
+            {" "}With a {fmtMoney(raise)} raise, that is a post-money of{" "}
+            <b className="mono">{fmtMoney(driverValue * lo + raise)}</b> – <b className="mono">{fmtMoney(driverValue * hi + raise)}</b>,
+            or <b className="mono">{fmtX((driverValue * lo + raise) / postBook)}</b> – <b className="mono">{fmtX((driverValue * hi + raise) / postBook)}</b> post-money
+            book (book {fmtMoney(driverValue)} + new equity {fmtMoney(raise)}).
+          </>}
+        </p>
+      ) : (
+        <p className="hint" style={{ marginTop: 4 }}>Enter {driver.short} above to see the implied {valueWord}.</p>
+      )}
       {tt.node}
     </div>
   );
@@ -1324,7 +1407,7 @@ function App() {
 
   const allPos = [...cap.positions, cap.esopPos];
   const FD = allPos.reduce((a, p) => a + p.shares, 0);
-  const primaryRaised = cap.positions.filter(p => !p.secondary).reduce((a, p) => a + p.invested, 0);
+  const primaryRaised = cap.positions.reduce((a, p) => a + (p.prefBase || 0), 0);
   const lastPriced = [...cap.snapshots].reverse().find(s => s.postMoney);
   const foundersShares = allPos.filter(p => p.group === "Founders").reduce((a, p) => a + p.shares, 0);
   const foundersPct = FD > 0 ? foundersShares / FD : null;
@@ -1332,11 +1415,17 @@ function App() {
   const sectorData = SECTORS[state.company.sector] || INDIA_SECTORS["SaaS (India → global)"];
   const stage = STAGES.includes(state.company.stage) ? state.company.stage : "Series C+";
   const stageRow = sectorData.stages ? sectorData.stages[stage] : null;
-  const multBand = stageRow ? stageRow.mult : (sectorData.evRev || null);
-  const multLabel = sectorData.basis || sectorData.evRevLabel || "EV / Revenue";
+  const metrics = metricsOf(sectorData);
+  const primaryMetric = metrics[0];
+  const multBand = bandOf(sectorData, stageRow, primaryMetric);
   const [loM, medM, hiM] = multBand || [0, 0, 0];
-  const impliedLow = multBand ? state.company.revenue * loM : (stageRow ? stageRow.post[0] : 0);
-  const impliedHigh = multBand ? state.company.revenue * hiM : (stageRow ? stageRow.post[2] : 0);
+  const primaryDriver = state.company[primaryMetric.driver] || 0;
+  const impliedLow = multBand ? primaryDriver * loM : (stageRow ? stageRow.post[0] : 0);
+  const impliedHigh = multBand ? primaryDriver * hiM : (stageRow ? stageRow.post[2] : 0);
+  const drivers = [...new Set(metrics.map(m => m.driver))];
+  const needsRaise = metrics.some(m => m.onBook);
+  const plannedRaise = state.company.plannedRaise != null ? state.company.plannedRaise : (stageRow ? stageRow.round[1] : 0);
+  const setCompany = patch => setState(s => ({ ...s, company: { ...s.company, ...patch } }));
 
   // Round economics
   const roundEcon = useMemo(() => {
@@ -1373,6 +1462,10 @@ function App() {
       const inv = ensure(r.holder);
       inv.realized += r.amount;
       inv.flows.push({ date: r.date, amount: r.amount });
+      (r.costs || []).forEach(c => {
+        inv.invested += c.amount;
+        inv.flows.push({ date: c.date, amount: -c.amount });
+      });
     });
     wf.rows.forEach(r => {
       if (map.has(r.holder)) {
@@ -1495,9 +1588,9 @@ function App() {
         <div className="stat"><div className="lbl">Last round P/R</div>
           <div className="val">{(() => { const r = roundEcon[roundEcon.length - 1]; return r && r.pr ? fmtX(r.pr) : "—"; })()}</div>
           <div className="sub">pre-money / revenue</div></div>
-        <div className="stat"><div className="lbl">Indicative EV band</div>
-          <div className="val">{fmtMoney(impliedLow, 0)}–{fmtMoney(impliedHigh, 0)}</div>
-          <div className="sub">{multBand ? `${stage} · ${loM}–${hiM}× rev` : `${stage} · typical post-money`}</div></div>
+        <div className="stat"><div className="lbl">{!multBand ? "Typical post-money" : primaryMetric.driver === "revenue" ? "Indicative EV band" : primaryMetric.onBook ? "Indicative pre-money" : "Indicative value"}</div>
+          <div className="val">{impliedHigh > 0 ? `${fmtMoney(impliedLow, 0)}–${fmtMoney(impliedHigh, 0)}` : "—"}</div>
+          <div className="sub">{multBand ? `${stage} · ${loM}–${hiM}× ${DRIVERS[primaryMetric.driver].short}` : `${stage} · sector band`}</div></div>
       </div>
 
       {state.isExample && (
@@ -1556,7 +1649,7 @@ function App() {
                     <td colSpan="3">Total</td>
                     <td className="num">{fmtShares(FD)}</td>
                     <td className="num">100.0%</td>
-                    <td className="num">{fmtMoney(cap.positions.reduce((a, p) => a + p.invested, 0))}</td>
+                    <td className="num" title="Primary capital raised; secondary purchases excluded">{fmtMoney(primaryRaised)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1885,8 +1978,14 @@ function App() {
                 <select value={stage} onChange={e => setState(s => ({ ...s, company: { ...s.company, stage: e.target.value } }))}>
                   {STAGES.map(k => <option key={k}>{k}</option>)}
                 </select></div>
-              <div><label className="f">Revenue ({unitLabel()})</label>
-                <NumInput value={state.company.revenue} onChange={v => setState(s => ({ ...s, company: { ...s.company, revenue: v } }))} style={{ width: 120 }} /></div>
+              {drivers.map(d => (
+                <div key={d}><label className="f">{DRIVERS[d].label} ({unitLabel()})</label>
+                  <NumInput value={state.company[d] || 0} onChange={v => setCompany({ [d]: v })} style={{ width: 120 }} /></div>
+              ))}
+              {needsRaise && (
+                <div><label className="f">Planned raise ({unitLabel()})</label>
+                  <NumInput value={plannedRaise} onChange={v => setCompany({ plannedRaise: v })} style={{ width: 110 }} /></div>
+              )}
             </div>
             {sectorData.stages && (
               <div style={{ marginBottom: 18 }}>
@@ -1896,17 +1995,30 @@ function App() {
                   <table>
                     <thead><tr>
                       <th>Stage</th><th className="num">Typical round</th>
-                      <th className="num">Typical post-money</th><th className="num">{sectorData.basis} band</th>
+                      <th className="num" title="Median post-money less median round — approximate">Pre-money (≈ median)</th>
+                      <th className="num">Typical post-money</th>
+                      {metrics.map(m => <th key={m.key} className="num">{m.label} band</th>)}
                     </tr></thead>
                     <tbody>
                       {STAGES.map(s => {
                         const row = sectorData.stages[s];
+                        const you = s === stage ? <span className="pill accent" style={{ marginLeft: 8 }}>you</span> : null;
+                        if (!row) return (
+                          <tr key={s} className={s === stage ? "cur-stage" : ""}>
+                            <td>{s}{you}</td>
+                            <td className="num hint" colSpan={3 + metrics.length}>not a typical entry stage for this sector</td>
+                          </tr>
+                        );
                         return (
                           <tr key={s} className={s === stage ? "cur-stage" : ""}>
-                            <td>{s}{s === stage ? <span className="pill accent" style={{ marginLeft: 8 }}>you</span> : null}</td>
+                            <td>{s}{you}</td>
                             <td className="num">{fmtCr(row.round[0])} – {fmtCr(row.round[2])}</td>
+                            <td className="num">{fmtCr(Math.max(0, row.post[1] - row.round[1]))}</td>
                             <td className="num">{fmtCr(row.post[0])} – {fmtCr(row.post[2])}</td>
-                            <td className="num">{row.mult ? `${row.mult[0]}–${row.mult[2]}× (med ${row.mult[1]}×)` : "traction-driven"}</td>
+                            {metrics.map(m => {
+                              const b = bandOf(sectorData, row, m);
+                              return <td key={m.key} className="num">{b ? `${b[0]}–${b[2]}× (med ${b[1]}×)` : Array.isArray(row.mult) || row.mult == null ? "traction-driven" : "—"}</td>;
+                            })}
                           </tr>
                         );
                       })}
@@ -1915,23 +2027,29 @@ function App() {
                 </div>
               </div>
             )}
-            {multBand ? (
-              <div>
-                <p className="chart-title">{multLabel} — {state.company.sector}{sectorData.stages ? ` · ${stage}` : ""}</p>
-                <MultipleRange sector={state.company.sector} band={multBand} company={state.company}
-                  impliedLow={impliedLow} impliedHigh={impliedHigh} />
-              </div>
-            ) : (
+            {sectorData.stages && !stageRow ? (
+              <p className="hint">{stage} is not a typical entry stage for this sector — pick the stage whose round size matches your raise.</p>
+            ) : multBand ? metrics.map(m => {
+              const band = bandOf(sectorData, stageRow, m);
+              if (!band) return null;
+              return (
+                <div key={m.key}>
+                  <p className="chart-title">{m.label} — {state.company.sector}{sectorData.stages ? ` · ${stage}` : ""}</p>
+                  <MultipleRange sector={state.company.sector} band={band} metric={m} companyName={state.company.name}
+                    driverValue={state.company[m.driver] || 0} raise={m.onBook ? plannedRaise : 0} />
+                </div>
+              );
+            }) : (
               <p className="hint">At {stage}, pricing is traction- and team-driven rather than multiple-driven — anchor on the typical round and post-money bands above.</p>
             )}
             <p className="hint" style={{ maxWidth: "70ch" }}>{sectorData.note}</p>
-            {lastPriced && state.company.revenue > 0 && multBand && (
+            {lastPriced && primaryDriver > 0 && multBand && (
               <p className="footnote" style={{ marginTop: 8 }}>
                 Your last post-money of <b className="mono">{fmtMoney(lastPriced.postMoney)}</b> implies{" "}
-                <b className="mono">{fmtX(lastPriced.postMoney / state.company.revenue)}</b> revenue —{" "}
-                {lastPriced.postMoney / state.company.revenue > hiM
+                <b className="mono">{fmtX(lastPriced.postMoney / primaryDriver)}</b> {primaryMetric.onBook ? "current book value (a post-money basis, so it reads lower than the pre-money band)" : DRIVERS[primaryMetric.driver].short} —{" "}
+                {lastPriced.postMoney / primaryDriver > hiM
                   ? <span className="delta-down">above the indicative band; expect multiple-compression pressure at the next round.</span>
-                  : lastPriced.postMoney / state.company.revenue < loM
+                  : lastPriced.postMoney / primaryDriver < loM
                     ? <span className="delta-up">below the indicative band; there may be headroom.</span>
                     : <span className="delta-up">inside the indicative band.</span>}
               </p>
@@ -1940,7 +2058,7 @@ function App() {
           <div className="grid2">
             <div className="panel">
               <h3>Indicative public comps</h3>
-              <p className="hint">{sectorData.stages ? "Listed Indian anchors — approximate revenue multiples" : "Approximate forward-revenue multiples (global, USD markets)"}</p>
+              <p className="hint">{sectorData.compsNote || (sectorData.stages ? "Listed Indian anchors — approximate revenue multiples" : "Approximate forward-revenue multiples (global, USD markets)")}</p>
               <div className="twrap"><table>
                 <thead><tr><th>Company</th><th className="num">Multiple</th></tr></thead>
                 <tbody>{sectorData.comps.map(([n, m], i) => (
@@ -1959,7 +2077,7 @@ function App() {
               </table></div>
             </div>
           </div>
-          <p className="footnote">These bands compress and expand with the cycle — peak-2021 deals (marked) are context, not comps. A next-round price outside the band needs a story: growth rate, net retention, or category heat. Multiples are unitless, so they apply to ₹ Cr revenue the same as USD.</p>
+          <p className="footnote">These bands compress and expand with the cycle — peak-2021 deals (marked) are context, not comps. A next-round price outside the band needs a story: growth rate, net retention, or category heat. Multiples are unitless, so they apply to ₹ Cr figures the same as USD.</p>
         </section>
       )}
 
