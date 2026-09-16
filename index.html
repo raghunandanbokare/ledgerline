@@ -1267,7 +1267,7 @@ function PricedEditor({ ev, onChange, onDelete, holderNames, info, allotted }) {
               <span className="hint" style={{ margin: 0 }}>shares</span>
             </>}
             {allotted && allotted[inv.investor || "Investor"] > 0 &&
-              <span className="hint mono" style={{ margin: 0 }}>→ {fmtShares(allotted[inv.investor || "Investor"])} shares</span>}
+              <span className="hint mono" style={{ margin: 0 }}>→ {fmtShares(allotted[inv.investor || "Investor"])} allotted</span>}
             <button className="btn sm danger" onClick={() =>
               onChange({ ...ev, investments: ev.investments.filter((_, j) => j !== i) })}>×</button>
           </div>

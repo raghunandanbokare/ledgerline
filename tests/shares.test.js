@@ -70,7 +70,7 @@ const rounds = tabText("rounds");
 expect("split editor", /Every holding and the option pool × 10\. Face value divides/.test(rounds));
 expect("seed info line", /₹100\.00 per share · 1,50,000 new shares · implied pre-money ₹1\.0 Cr · post-money ₹2\.5 Cr/.test(rounds),
   rounds.match(/₹100\.00 per share[^A-Z]*/)?.[0]);
-expect("per-investor allotments", /→ 1,00,000 shares/.test(rounds) && /→ 50,000 shares/.test(rounds));
+expect("per-investor allotments", /→ 1,00,000 allotted/.test(rounds) && /→ 50,000 allotted/.test(rounds));
 expect("series A info line with unallotted remainder",
   /₹1,800\.01 per share · 55,555 new shares · pre-money ₹50\.0 Cr · post-money ₹60\.0 Cr · ₹444\.45 not allotted \(whole shares\)/.test(rounds),
   (rounds.match(/₹[\d,.]+ per share · 55,555[^A-Z]*/) || [rounds.slice(rounds.indexOf("Z Capital") - 20, rounds.indexOf("Z Capital") + 260)])[0]);
