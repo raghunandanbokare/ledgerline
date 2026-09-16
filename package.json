@@ -1,0 +1,15 @@
+{
+  "name": "ledgerline",
+  "private": true,
+  "description": "Cap table, exit waterfall, returns and India valuation benchmarks — single-page app served from index.html",
+  "scripts": {
+    "test": "node tests/engine.test.js && node tests/render.test.js && node tests/wizard.test.js",
+    "test:engine": "node tests/engine.test.js",
+    "serve": "python -m http.server 8642"
+  },
+  "devDependencies": {
+    "@babel/standalone": "7.23.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
