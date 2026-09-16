@@ -95,5 +95,78 @@ const near = (name, got, want, tol = 1e-6) => {
   near("remaining cost basis", cap.positions.find(p => p.holder === "SeedVC").invested, 5);
   near("primary raised conserved", cap.positions.reduce((a, p) => a + p.prefBase, 0), 40);
 }
+// ---- Share-count mode (company.wholeShares; ₹ Cr model, per-share figures in ₹) ----
+const CR = { unit: "cr", wholeShares: true, faceValue: 10 };
+
+// 9. Priced by share price ₹1,000: cheques by amount and by share count; odd amount floors to whole shares
+{
+  const st = { company: CR, founders: [{ name: "A", shares: 6000 }, { name: "B", shares: 4000 }], events: [
+    { id: "s", kind: "priced", name: "Seed", date: "2020-01-01", pricing: "price", pricePerShare: 1000, investments: [
+      { investor: "X", amount: 1 }, { investor: "Y", shares: 5500 }, { investor: "Z", amount: 0.123456 }] }] };
+  const cap = E.computeCapTable(st);
+  const sh = h => cap.positions.find(p => p.holder === h).shares;
+  near("X gets ₹1 Cr ÷ ₹1,000 = 10,000 shares", sh("X"), 10000);
+  near("Y entered by shares", sh("Y"), 5500);
+  near("Y pays 5,500 × ₹1,000 = ₹0.55 Cr", cap.positions.find(p => p.holder === "Y").invested, 0.55);
+  near("Z floors 1,234.56 → 1,234 shares", sh("Z"), 1234);
+  const r = cap.rounds[0];
+  near("pre-money = ₹1,000 × 10,000 = ₹1 Cr", r.preMoney, 1);
+  near("raise = shares × price", r.raise, 1.6734);
+  near("unallotted remainder", r.unallotted, 0.000056);
+  near("issued shares", cap.issuedShares, 26734);
+  near("share capital = 26,734 × ₹10", cap.shareCapital, 0.026734);
+  near("securities premium = raise − new shares × ₹10", cap.premium, 1.656666);
+  near("post-money = pre + raise", cap.snapshots[1].postMoney, 2.6734);
+}
+
+// 10. 1:10 split, then a round priced from pre-money: ₹10 Cr ÷ 100,000 shares = ₹1,000
+{
+  const st = { company: CR, founders: [{ name: "A", shares: 10000 }], events: [
+    { id: "x", kind: "split", splitType: "split", ratio: 10, name: "Split", date: "2020-01-01" },
+    { id: "s", kind: "priced", name: "Seed", date: "2020-06-01", preMoney: 10, investments: [{ investor: "VC", amount: 2 }] }] };
+  const cap = E.computeCapTable(st);
+  near("founder shares after split", cap.positions[0].shares, 100000);
+  near("face value ₹10 → ₹1", cap.faceValue, 1);
+  near("price per share in ₹", cap.rounds[0].price * 1e7, 1000);
+  near("investor shares", cap.positions.find(p => p.holder === "VC").shares, 20000);
+  near("share capital = 120,000 × ₹1", cap.shareCapital, 0.012);
+}
+
+// 11. 1:1 bonus issue doubles shares, face value unchanged, share capital doubles
+{
+  const st = { company: CR, founders: [{ name: "A", shares: 10000 }], events: [
+    { id: "b", kind: "split", splitType: "bonus", bonusNew: 1, bonusHeld: 1, name: "Bonus", date: "2020-01-01" }] };
+  const cap = E.computeCapTable(st);
+  near("bonus doubles shares", cap.issuedShares, 20000);
+  near("face value unchanged", cap.faceValue, 10);
+  near("share capital ₹2 lakh", cap.shareCapital, 0.02);
+}
+
+// 12. Pre-money pricing rounds the price to the paisa: ₹1 Cr ÷ 30,000 = ₹333.33
+{
+  const st = { company: CR, founders: [{ name: "A", shares: 30000 }], events: [
+    { id: "s", kind: "priced", name: "Seed", date: "2020-01-01", preMoney: 1, investments: [{ investor: "VC", amount: 0.1 }] }] };
+  const cap = E.computeCapTable(st);
+  near("price rounded to ₹333.33", cap.rounds[0].price * 1e7, 333.33);
+  near("₹10 lakh buys 3,000 shares", cap.positions.find(p => p.holder === "VC").shares, 3000);
+  near("paid 3,000 × ₹333.33", cap.rounds[0].raise, 0.099999);
+  near("effective pre-money", cap.rounds[0].preMoney, 0.99999);
+}
+
+// 13–14. Issued vs fully diluted with a whole-share pool top-up; whole-share secondary
+{
+  const st = { company: CR, founders: [{ name: "A", shares: 10000 }], events: [
+    { id: "s", kind: "priced", name: "Seed", date: "2020-01-01", preMoney: 4, esopTarget: 0.1, esopTiming: "post", investments: [{ investor: "VC", amount: 1 }] },
+    { id: "a", kind: "priced", name: "Series A", date: "2022-01-01", preMoney: 10, investments: [],
+      secondaries: [{ seller: "VC", buyer: "B", pct: 0.333 }] }] };
+  const cap = E.computeCapTable(st);
+  near("seed: ₹1 Cr at ₹4,000 = 2,500 shares", cap.snapshots[1].issuedShares, 12500);
+  near("pool top-up floors 1,388.9 → 1,388", cap.snapshots[1].totals.ESOP, 1388);
+  near("A price ₹1 Cr×10 ÷ 13,888 → ₹7,200.46", cap.rounds[1].price * 1e7, 7200.46);
+  near("secondary floors 832.5 → 832 shares", cap.positions.find(p => p.holder === "B").shares, 832);
+  near("sold cost basis pro rata 832/2,500", cap.realized[0].costs[0].amount, 0.3328);
+  near("proceeds 832 × ₹7,200.46", cap.realized[0].amount, 0.599078272);
+  near("issued excludes the pool", cap.issuedShares, 12500);
+}
 console.log(fails ? `\n${fails} failing` : "\nall passing");
 process.exitCode = fails ? 1 : 0;

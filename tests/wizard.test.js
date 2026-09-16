@@ -4,7 +4,7 @@
 const { loadApp, toText, checker } = require("./harness");
 const { expect, done } = checker();
 
-// Seed the wizard's useState calls in order: step, co, team, rounds, exit
+// Seed the wizard's useState calls in order: step, co, team, rounds, exit, entry
 let seeds = null, call = 0, buildFn = null;
 const app = loadApp({
   beforeRun(React) {
@@ -60,4 +60,35 @@ const FD = cap.positions.reduce((x, p) => x + p.shares, 0) + cap.esopShares;
 const gf = cap.positions.filter(p => p.holder === "Growth Fund").reduce((x, p) => x + p.shares, 0) / FD;
 expect("engine: no errors", cap.errors.length === 0, cap.errors.join("; "));
 expect("engine: Growth Fund owns 30/190 after Series A", Math.abs(gf - 30 / 190) < 1e-9, `${(gf * 100).toFixed(2)}%`);
+// ---- Share-count entry ----
+{
+  const coS = { ...co, revenue: 0, faceValue: 10 };
+  const teamS = [{ id: "t1", name: "Asha", pct: 0, shares: 6000, group: "Founders" }, { id: "t2", name: "Ravi", pct: 0, shares: 4000, group: "Founders" }];
+  const roundsS = [
+    { id: "x", kind: "split", name: "Split", date: "2021-01-01", val: 0, amount: 0, splitType: "split", ratio: 10, bonusNew: 1, bonusHeld: 1, investors: [] },
+    // ₹10,000/share after the split: ₹20 Cr → 20,000 shares; pre = 100,000 × ₹10,000 = ₹100 Cr
+    { id: "p", kind: "priced", name: "Seed", date: "2022-01-01", val: 10000, amount: 0, esop: 0, pricing: "price",
+      investors: [{ id: "i1", name: "Lead VC", amount: 20 }] },
+  ];
+  const w1 = render({ 0: 1, 1: coS, 2: teamS, 5: "shares" });
+  expect("share entry: founding total + capital", /Issued at founding: 10,000 shares · share capital ₹1,00,000/.test(w1),
+    w1.match(/Issued at founding[^A-Z]*/)?.[0]);
+  expect("share entry: per-person %", /shares · 60\.0%/.test(w1) && /shares · 40\.0%/.test(w1));
+  expect("share entry: no diluted-holdings", /Don't enter today's diluted holdings/.test(w1));
+  const w2 = render({ 0: 2, 1: coS, 2: teamS, 3: roundsS, 5: "shares" });
+  expect("share entry: split row", /Multiplies every holding by 10/.test(w2));
+  expect("share entry: price-per-share round hint", /Round size: ₹20 Cr · ≈ 20,000 new shares at ₹10,000/.test(w2),
+    w2.match(/Round size[^A-Z]*/)?.[0]);
+  let builtS = null;
+  const w3 = render({ 0: 3, 1: coS, 2: teamS, 3: roundsS, 5: "shares" }, st => { builtS = st; });
+  expect("share entry: summary", /10,000 founding shares, 1 split\/bonus event/.test(w3), w3.match(/founding shareholders[^A-Z]*/)?.[0]);
+  buildFn();
+  expect("share entry: company flags", builtS.company.wholeShares === true && builtS.company.faceValue === 10);
+  expect("share entry: founders keep share counts", builtS.founders.map(f => f.shares).join() === "6000,4000");
+  expect("share entry: split + price round events",
+    builtS.events.map(e => e.kind).join() === "split,priced" && builtS.events[1].pricing === "price" && builtS.events[1].pricePerShare === 10000);
+  expect("share entry: default exit = 3 × ₹120 Cr post", builtS.exit.value === 360, String(builtS.exit.value));
+  const capS = app.computeCapTable(builtS);
+  expect("share entry: engine allots 20,000 shares", capS.positions.find(p => p.holder === "Lead VC").shares === 20000);
+}
 done();

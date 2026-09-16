@@ -561,7 +561,11 @@ const fmtMoney = (v, digits) => {
 const unitLabel = () => MONEY.unit === "cr" ? "₹ Cr" : MONEY.sym;
 const fmtCr = v => v >= 1000 ? `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })} Cr` : `₹${v} Cr`;
 const fmtPct = (v, d = 1) => (v == null || isNaN(v)) ? "—" : (v * 100).toFixed(d) + "%";
-const fmtShares = v => (v == null || isNaN(v)) ? "—" : Math.round(v).toLocaleString("en-US");
+const fmtShares = v => (v == null || isNaN(v)) ? "—" : Math.round(v).toLocaleString(MONEY.unit === "cr" ? "en-IN" : "en-US");
+// Per-share values and small sums arrive in display units (₹ Cr); show them in absolute currency
+const fmtAbs = v => (v == null || isNaN(v)) ? "—"
+  : `${MONEY.sym}${(v * (MONEY.unit === "cr" ? 1e7 : 1)).toLocaleString(MONEY.unit === "cr" ? "en-IN" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtFace = v => v > 0 ? `${MONEY.sym}${v.toLocaleString("en-IN", { maximumFractionDigits: 4 })}` : "—";
 const fmtX = v => (v == null || isNaN(v) || !isFinite(v)) ? "—" : v.toFixed(v >= 10 ? 1 : 2) + "×";
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -572,6 +576,16 @@ function sortedEvents(state) {
   return [...state.events].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 }
 
+// Amounts are in display units (₹ Cr, or absolute $/€/£). Per-share figures (price, face
+// value) are always entered in absolute currency, so ₹ Cr models scale them by 1e7.
+const perShareScale = company => (company && company.unit === "cr") ? 1e7 : 1;
+
+// Split: each share becomes `ratio` shares (face value divides). Bonus: `bonusNew` new
+// shares for every `bonusHeld` held (face value unchanged, capitalised from reserves).
+const splitMultiplier = ev => ev.splitType === "bonus"
+  ? 1 + (ev.bonusNew || 0) / (ev.bonusHeld || 1)
+  : (ev.ratio || 0);
+
 /** Full cap table history.
  * positions: [{holder, group, kind, eventId, shares, invested, prefBase, secondary, date,
  *              prefMultiple, participating, rank}]
@@ -579,20 +593,32 @@ function sortedEvents(state) {
  *   liquidation preference is computed on (moves with the shares in a secondary).
  * realized:  [{holder, date, amount, costs:[{date, amount}], note}]  — secondary sale
  *   proceeds, with the cost basis of the shares sold (keeps IRR/MOIC on original cost)
- * snapshots: [{label, date, totals:{group:shares}, totalShares, price, postMoney}]
+ * snapshots: [{label, date, totals:{group:shares}, totalShares, issuedShares, price, postMoney}]
+ * rounds:    [{eventId, name, date, pricing, price, preMoney, nominal, raise, unallotted,
+ *              newShares, faceValue}] — price in display units per share
+ * With company.wholeShares, every allotment, conversion, pool top-up and transfer is a
+ * whole number of shares, round-derived prices are rounded to the paisa/cent, and each
+ * investor pays shares × price (the remainder is reported as unallotted).
  */
 function computeCapTable(state) {
   const errors = [];
+  const co = state.company || {};
+  const whole = !!co.wholeShares;
+  const scale = perShareScale(co);
+  const cnt = v => whole ? Math.floor(v + 1e-9) : v;
   const events = sortedEvents(state);
   const positions = [];
   const realized = [];
+  const rounds = [];
   const groupsBase = [];
+  let faceValue = co.faceValue > 0 ? co.faceValue : 0; // absolute currency per share
+  let premium = 0; // display units: cash received above face value on allotments
   state.founders.forEach(f => {
     const g = f.group === "Angels" ? "Angels" : "Founders";
     if (!groupsBase.includes(g)) groupsBase.push(g);
     if (f.shares > 0) positions.push({
       holder: f.name || "Shareholder", group: g, kind: "common",
-      eventId: null, shares: f.shares, invested: 0, prefBase: 0, secondary: false, date: null,
+      eventId: null, shares: cnt(f.shares), invested: 0, prefBase: 0, secondary: false, date: null,
     });
   });
   if (!groupsBase.includes("Founders")) groupsBase.unshift("Founders");
@@ -600,12 +626,13 @@ function computeCapTable(state) {
   let esopShares = 0;
   let pendingSafes = [];
 
+  const issued = () => positions.reduce((a, p) => a + p.shares, 0);
   const snapAt = (label, date, price, postMoney) => {
     const totals = {};
     positions.forEach(p => { totals[p.group] = (totals[p.group] || 0) + p.shares; });
     totals["ESOP"] = esopShares;
     const totalShares = Object.values(totals).reduce((a, b) => a + b, 0);
-    return { label, date, totals, totalShares, price, postMoney };
+    return { label, date, totals, totalShares, issuedShares: issued(), price, postMoney };
   };
   const snapshots = [snapAt("Founding", null, null, null)];
 
@@ -617,14 +644,31 @@ function computeCapTable(state) {
       snapshots.push(snapAt(ev.name + " (unconverted)", ev.date, null, null));
       return;
     }
+    if (ev.kind === "split") {
+      const mult = splitMultiplier(ev);
+      const label = ev.name || (ev.splitType === "bonus" ? "Bonus issue" : "Share split");
+      if (!(mult > 0)) {
+        errors.push(`${label}: needs a positive ratio.`);
+        return;
+      }
+      positions.forEach(p => { p.shares = cnt(p.shares * mult); });
+      esopShares = cnt(esopShares * mult);
+      if (ev.splitType !== "bonus" && faceValue > 0) faceValue = faceValue / mult;
+      snapshots.push(snapAt(label, ev.date, null, null));
+      return;
+    }
     if (ev.kind !== "priced") return;
     if (!groups.includes(ev.name)) groups.push(ev.name);
 
-    const S_pre = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
-    const totalNew = (ev.investments || []).reduce((a, i) => a + (i.amount || 0), 0);
-    const preMoney = ev.preMoney || 0;
-    if (preMoney <= 0 || S_pre <= 0) {
-      errors.push(`${ev.name}: needs a positive pre-money and existing shares.`);
+    const S_pre = issued() + esopShares;
+    const byPrice = ev.pricing === "price";
+    const fixedPrice = byPrice && ev.pricePerShare > 0 ? ev.pricePerShare / scale : 0;
+    // With a fixed price an investor may be entered by share count instead of amount
+    const nominalOf = inv => (fixedPrice && inv.shares > 0) ? inv.shares * fixedPrice : (inv.amount || 0);
+    const investments = (ev.investments || []).filter(inv => nominalOf(inv) > 0);
+    const totalNew = investments.reduce((a, inv) => a + nominalOf(inv), 0);
+    if ((byPrice ? !(fixedPrice > 0) : !(ev.preMoney > 0)) || S_pre <= 0) {
+      errors.push(`${ev.name}: needs a positive ${byPrice ? "price per share" : "pre-money"} and existing shares.`);
       snapshots.push(snapAt(ev.name, ev.date, null, null));
       return;
     }
@@ -632,31 +676,47 @@ function computeCapTable(state) {
     const target = ev.esopTarget || 0;
     const timingPre = (ev.esopTiming || "post") === "pre";
 
-    // Iteratively solve price + SAFE conversion (+ pre-money pool if that timing)
-    let price = preMoney / S_pre;
-    let poolAdd = 0;
-    let safeShares = pendingSafes.map(() => 0);
-    for (let iter = 0; iter < 60; iter++) {
-      const totalSafe0 = safeShares.reduce((a, b) => a + b, 0);
-      const capBase = S_pre + totalSafe0; // post-money SAFE capitalization — excludes this round's pool increase (YC definition)
-      safeShares = pendingSafes.map(s => {
-        const amt = s.amount || 0;
-        let capSh = 0;
-        if (s.cap > 0) {
-          if (s.capType === "post") capSh = (amt / s.cap) * capBase;
-          else capSh = amt / (s.cap / (S_pre + poolAdd));
-        }
-        const discSh = (s.discount > 0 && price > 0) ? amt / (price * (1 - s.discount)) : 0;
-        return Math.max(capSh, discSh, (s.cap > 0 || s.discount > 0) ? 0 : (price > 0 ? amt / price : 0));
-      });
-      const totalSafe = safeShares.reduce((a, b) => a + b, 0);
-      price = preMoney / (S_pre + poolAdd + totalSafe);
-      if (timingPre && target > 0) {
-        const invShares = price > 0 ? totalNew / price : 0;
-        const denom = 1 - target;
-        poolAdd = Math.max(0, (target * (S_pre + totalSafe + invShares) - esopShares) / (denom > 0 ? denom : 1));
-      } else poolAdd = 0;
+    // Solve price + SAFE conversion (+ pre-money pool if that timing). With `pinned`
+    // the price is given; otherwise it iterates from the pre-money.
+    const solve = pinned => {
+      let price = pinned || ev.preMoney / S_pre;
+      let poolAdd = 0;
+      let safeShares = pendingSafes.map(() => 0);
+      for (let iter = 0; iter < 60; iter++) {
+        const totalSafe0 = safeShares.reduce((a, b) => a + b, 0);
+        const capBase = S_pre + totalSafe0; // post-money SAFE capitalization — excludes this round's pool increase (YC definition)
+        safeShares = pendingSafes.map(s => {
+          const amt = s.amount || 0;
+          let capSh = 0;
+          if (s.cap > 0) {
+            if (s.capType === "post") capSh = (amt / s.cap) * capBase;
+            else capSh = amt / (s.cap / (S_pre + poolAdd));
+          }
+          const discSh = (s.discount > 0 && price > 0) ? amt / (price * (1 - s.discount)) : 0;
+          return Math.max(capSh, discSh, (s.cap > 0 || s.discount > 0) ? 0 : (price > 0 ? amt / price : 0));
+        });
+        const totalSafe = safeShares.reduce((a, b) => a + b, 0);
+        if (!pinned) price = ev.preMoney / (S_pre + poolAdd + totalSafe);
+        if (timingPre && target > 0) {
+          const invShares = price > 0 ? totalNew / price : 0;
+          const denom = 1 - target;
+          poolAdd = Math.max(0, (target * (S_pre + totalSafe + invShares) - esopShares) / (denom > 0 ? denom : 1));
+        } else poolAdd = 0;
+      }
+      return { price, poolAdd, safeShares };
+    };
+    let sol = solve(fixedPrice);
+    if (whole && !fixedPrice) {
+      // Allotments happen at a price in whole paise/cents; re-solve at the rounded price
+      const rounded = Math.round(sol.price * scale * 100) / 100 / scale;
+      if (rounded > 0) sol = solve(rounded);
     }
+    const price = sol.price;
+    const poolAdd = cnt(sol.poolAdd);
+    const safeShares = sol.safeShares.map(cnt);
+    const preMoney = (byPrice || whole) ? price * (S_pre + poolAdd + safeShares.reduce((a, b) => a + b, 0)) : ev.preMoney;
+    const fvDisplay = faceValue / scale;
+    let newShares = 0;
 
     // SAFE conversions become 1x non-participating preferred, pari passu with this round
     pendingSafes.forEach((s, i) => {
@@ -665,23 +725,33 @@ function computeCapTable(state) {
         eventId: s.id, shares: safeShares[i], invested: s.amount || 0, prefBase: s.amount || 0, secondary: false, date: s.date,
         prefMultiple: 1, participating: false, rank,
       });
+      newShares += safeShares[i];
+      premium += (s.amount || 0) - safeShares[i] * fvDisplay;
     });
     pendingSafes = [];
     esopShares += poolAdd;
 
-    (ev.investments || []).forEach(inv => {
-      if (!(inv.amount > 0)) return;
+    let raise = 0;
+    investments.forEach(inv => {
+      const nominal = nominalOf(inv);
+      const given = fixedPrice && inv.shares > 0;
+      const shares = given ? cnt(inv.shares) : (price > 0 ? cnt(nominal / price) : 0);
+      const invested = (whole || given) ? shares * price : nominal;
+      if (!(shares > 0)) return;
+      raise += invested;
+      newShares += shares;
+      premium += invested - shares * fvDisplay;
       positions.push({
         holder: inv.investor || "Investor", group: ev.name, kind: "preferred",
-        eventId: ev.id, shares: price > 0 ? inv.amount / price : 0, invested: inv.amount, prefBase: inv.amount, secondary: false, date: ev.date,
+        eventId: ev.id, shares, invested, prefBase: invested, secondary: false, date: ev.date,
         prefMultiple: ev.prefMultiple || 1, participating: !!ev.participating, rank,
       });
     });
 
     // Post-round ESOP top-up (dilutes everyone, incl. the new investors) — sample-file convention
     if (!timingPre && target > 0 && target < 1) {
-      const FD_after = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
-      const want = (target * FD_after - esopShares) / (1 - target);
+      const FD_after = issued() + esopShares;
+      const want = cnt((target * FD_after - esopShares) / (1 - target));
       if (want > 0) esopShares += want;
     }
 
@@ -694,10 +764,11 @@ function computeCapTable(state) {
       let totalValue = 0;
       const costs = [];
       sellerPos.forEach(p => {
-        const sold = p.shares * pct;
+        const sold = cnt(p.shares * pct);
         if (sold <= 0) return;
-        const soldCost = (p.invested || 0) * pct;
-        const soldPref = (p.prefBase || 0) * pct;
+        const frac = sold / p.shares;
+        const soldCost = (p.invested || 0) * frac;
+        const soldPref = (p.prefBase || 0) * frac;
         p.shares -= sold;
         p.invested = (p.invested || 0) - soldCost;
         p.prefBase = (p.prefBase || 0) - soldPref;
@@ -717,12 +788,22 @@ function computeCapTable(state) {
       });
     });
 
-    const FD = positions.reduce((a, p) => a + p.shares, 0) + esopShares;
-    snapshots.push(snapAt(ev.name, ev.date, price, preMoney + totalNew));
+    rounds.push({
+      eventId: ev.id, name: ev.name, date: ev.date, pricing: byPrice ? "price" : "pre",
+      price, preMoney, nominal: totalNew, raise, unallotted: Math.max(0, totalNew - raise),
+      newShares, faceValue,
+    });
+    snapshots.push(snapAt(ev.name, ev.date, price, preMoney + raise));
   });
 
   const esopPos = { holder: "Option pool (ESOP)", group: "ESOP", kind: "common", eventId: null, shares: esopShares, invested: 0, prefBase: 0, secondary: false, date: null };
-  return { snapshots, positions, esopShares, esopPos, groups, errors, realized };
+  const issuedShares = issued();
+  return {
+    snapshots, positions, esopShares, esopPos, groups, errors, realized, rounds,
+    issuedShares, faceValue, scale,
+    shareCapital: issuedShares * faceValue / scale,
+    premium,
+  };
 }
 
 /** Exit waterfall with convert-vs-preference equilibrium. */
@@ -852,9 +933,9 @@ const slotColor = (groups, group) => {
 /* ================================================================
    CHARTS
 ================================================================ */
-function OwnershipBar({ cap }) {
+function OwnershipBar({ cap, includePool = true }) {
   const tt = useTooltip();
-  const allPos = [...cap.positions, cap.esopPos];
+  const allPos = includePool ? [...cap.positions, cap.esopPos] : cap.positions;
   const total = allPos.reduce((a, p) => a + p.shares, 0);
   if (total <= 0) return null;
   const byGroup = cap.groups.map(g => ({
@@ -866,7 +947,7 @@ function OwnershipBar({ cap }) {
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
-        aria-label="Fully diluted ownership today">
+        aria-label={includePool ? "Fully diluted ownership today" : "Ownership of issued shares today"}>
         {byGroup.map(d => {
           const w = (d.shares / total) * W;
           const seg = (
@@ -1094,7 +1175,45 @@ function SafeEditor({ ev, onChange, onDelete }) {
   );
 }
 
-function PricedEditor({ ev, onChange, onDelete, holderNames }) {
+function SplitEditor({ ev, onChange, onDelete }) {
+  const bonus = ev.splitType === "bonus";
+  const mult = splitMultiplier(ev);
+  return (
+    <div className="panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <h3><span className="pill accent">{bonus ? "Bonus issue" : "Share split"}</span>&nbsp; {ev.name}</h3>
+        <button className="btn sm danger" onClick={onDelete}>Remove</button>
+      </div>
+      <div className="frow" style={{ marginTop: 8 }}>
+        <div><label className="f">Label</label>
+          <input value={ev.name} onChange={e => onChange({ ...ev, name: e.target.value })} style={{ width: 150 }} /></div>
+        <div><label className="f">Date</label>
+          <input type="date" value={ev.date} onChange={e => onChange({ ...ev, date: e.target.value })} /></div>
+        <div><label className="f">Type</label>
+          <select value={bonus ? "bonus" : "split"} onChange={e => onChange({ ...ev, splitType: e.target.value })}>
+            <option value="split">Split (sub-division)</option>
+            <option value="bonus">Bonus issue</option>
+          </select></div>
+        {bonus ? <>
+          <div><label className="f">New shares</label>
+            <NumInput value={ev.bonusNew} onChange={v => onChange({ ...ev, bonusNew: v })} style={{ width: 70 }} /></div>
+          <div><label className="f">For every … held</label>
+            <NumInput value={ev.bonusHeld} onChange={v => onChange({ ...ev, bonusHeld: v || 1 })} style={{ width: 70 }} /></div>
+        </> : <div><label className="f">Each share becomes</label>
+          <NumInput value={ev.ratio} onChange={v => onChange({ ...ev, ratio: v })} style={{ width: 80 }} /></div>}
+      </div>
+      <p className="hint" style={{ margin: "10px 0 0" }}>
+        {mult > 0 ? `Every holding and the option pool × ${Math.round(mult * 10000) / 10000}. ` : "Enter a positive ratio. "}
+        {bonus
+          ? "Face value is unchanged, so share capital grows (capitalised from reserves). Ownership percentages don't change."
+          : "Face value divides by the same ratio, so share capital is unchanged. Ownership percentages don't change."}
+      </p>
+    </div>
+  );
+}
+
+function PricedEditor({ ev, onChange, onDelete, holderNames, info, allotted }) {
+  const byPrice = ev.pricing === "price";
   const setInv = (i, patch) => onChange({ ...ev, investments: ev.investments.map((x, j) => j === i ? { ...x, ...patch } : x) });
   const secs = ev.secondaries || [];
   const setSec = (i, patch) => onChange({ ...ev, secondaries: secs.map((x, j) => j === i ? { ...x, ...patch } : x) });
@@ -1109,8 +1228,16 @@ function PricedEditor({ ev, onChange, onDelete, holderNames }) {
           <input value={ev.name} onChange={e => onChange({ ...ev, name: e.target.value })} style={{ width: 110 }} /></div>
         <div><label className="f">Date</label>
           <input type="date" value={ev.date} onChange={e => onChange({ ...ev, date: e.target.value })} /></div>
-        <div><label className="f">Pre-money ({unitLabel()})</label>
-          <NumInput value={ev.preMoney} onChange={v => onChange({ ...ev, preMoney: v })} style={{ width: 110 }} /></div>
+        <div><label className="f">Priced by</label>
+          <select value={byPrice ? "price" : "pre"} onChange={e => onChange({ ...ev, pricing: e.target.value })}>
+            <option value="pre">Pre-money valuation</option>
+            <option value="price">Price per share</option>
+          </select></div>
+        {byPrice
+          ? <div><label className="f">Price / share ({MONEY.sym})</label>
+            <NumInput value={ev.pricePerShare} onChange={v => onChange({ ...ev, pricePerShare: v })} style={{ width: 110 }} /></div>
+          : <div><label className="f">Pre-money ({unitLabel()})</label>
+            <NumInput value={ev.preMoney} onChange={v => onChange({ ...ev, preMoney: v })} style={{ width: 110 }} /></div>}
         <div><label className="f">Revenue at round</label>
           <NumInput value={ev.revenue} onChange={v => onChange({ ...ev, revenue: v })} style={{ width: 100 }} /></div>
         <div><label className="f">ESOP target %</label>
@@ -1133,14 +1260,28 @@ function PricedEditor({ ev, onChange, onDelete, holderNames }) {
           <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
             <input value={inv.investor} placeholder="Investor name"
               onChange={e => setInv(i, { investor: e.target.value })} style={{ flex: "1 1 160px", maxWidth: 230 }} />
-            <NumInput value={inv.amount} onChange={v => setInv(i, { amount: v })} style={{ width: 110 }} placeholder="Amount" />
+            <NumInput value={inv.amount} onChange={v => setInv(i, { amount: v })} style={{ width: 110 }} placeholder={`Amount (${unitLabel()})`} />
+            {byPrice && <>
+              <span className="hint" style={{ margin: 0 }}>or</span>
+              <NumInput value={inv.shares || 0} onChange={v => setInv(i, { shares: v })} style={{ width: 110 }} placeholder="Shares" />
+              <span className="hint" style={{ margin: 0 }}>shares</span>
+            </>}
+            {allotted && allotted[inv.investor || "Investor"] > 0 &&
+              <span className="hint mono" style={{ margin: 0 }}>→ {fmtShares(allotted[inv.investor || "Investor"])} shares</span>}
             <button className="btn sm danger" onClick={() =>
               onChange({ ...ev, investments: ev.investments.filter((_, j) => j !== i) })}>×</button>
           </div>
         ))}
+        {byPrice && <p className="hint" style={{ margin: "2px 0 6px" }}>A share count, when entered, takes precedence over the amount (amount = shares × price).</p>}
         <button className="btn sm" onClick={() =>
           onChange({ ...ev, investments: [...ev.investments, { investor: "", amount: 0 }] })}>+ Add investor</button>
       </div>
+      {info && (
+        <p className="hint mono" style={{ margin: "10px 0 0" }}>
+          {fmtAbs(info.price)} per share · {fmtShares(info.newShares)} new shares · {byPrice ? "implied " : ""}pre-money {fmtMoney(info.preMoney)} · post-money {fmtMoney(info.preMoney + info.raise)}
+          {info.unallotted > 1e-12 ? ` · ${fmtAbs(info.unallotted)} not allotted (whole shares)` : ""}
+        </p>
+      )}
       <div style={{ marginTop: 14 }}>
         <label className="f">Secondary sales at this round (priced at the round's price per share)</label>
         {secs.map((sec, i) => (
@@ -1182,48 +1323,63 @@ function SectorSelect({ value, onChange, style }) {
 ================================================================ */
 function SetupWizard({ onDone, onExample, onCancel }) {
   const [step, setStep] = useState(0);
-  const [co, setCo] = useState({ name: "", sector: "SaaS (India → global)", stage: "Seed", unit: "cr", currency: "₹", revenue: 0, ebitda: 0 });
+  const [co, setCo] = useState({ name: "", sector: "SaaS (India → global)", stage: "Seed", unit: "cr", currency: "₹", revenue: 0, ebitda: 0, faceValue: 10 });
   const [team, setTeam] = useState([
-    { id: uid(), name: "", pct: 60, group: "Founders" },
-    { id: uid(), name: "", pct: 40, group: "Founders" },
+    { id: uid(), name: "", pct: 60, shares: 6000, group: "Founders" },
+    { id: uid(), name: "", pct: 40, shares: 4000, group: "Founders" },
   ]);
   const [rounds, setRounds] = useState([]);
   const [exit, setExit] = useState({ value: 0, date: (new Date().getFullYear() + 4) + "-03-31" });
+  const [entry, setEntry] = useState("pct"); // "pct" | "shares"
+  const byShares = entry === "shares";
+  const sym = co.unit === "cr" ? "₹" : co.currency;
 
-  const validTeam = team.filter(t => t.name.trim() && t.pct > 0);
+  const validTeam = team.filter(t => t.name.trim() && (byShares ? t.shares > 0 : t.pct > 0));
   const totalPct = validTeam.reduce((a, t) => a + t.pct, 0);
+  const totalShares = validTeam.reduce((a, t) => a + (t.shares || 0), 0);
   const canNext = step === 0 ? co.name.trim().length > 0 : step === 1 ? validTeam.length > 0 : true;
 
   const setT = (i, patch) => setTeam(team.map((x, j) => j === i ? { ...x, ...patch } : x));
   const setR = (i, patch) => setRounds(rounds.map((x, j) => j === i ? { ...x, ...patch } : x));
   const newInvestor = () => ({ id: uid(), name: "", amount: 0 });
   const setRI = (i, k, patch) => setR(i, { investors: rounds[i].investors.map((x, j) => j === k ? { ...x, ...patch } : x) });
+  const pricedCount = rounds.filter(r => r.kind === "priced").length;
   const addRound = kind => setRounds([...rounds, {
-    id: uid(), kind, name: kind === "safe" ? "SAFE" : rounds.length === 0 ? "Seed" : "Series " + "ABCDE"[Math.min(4, rounds.length - 1)],
+    id: uid(), kind,
+    name: kind === "safe" ? "SAFE" : kind === "split" ? "Share split" : pricedCount === 0 ? "Seed" : "Series " + "ABCDE"[Math.min(4, pricedCount - 1)],
     date: new Date().toISOString().slice(0, 10), val: 0, amount: 0, investor: "", esop: 0,
-    investors: kind === "safe" ? [] : [newInvestor()],
+    pricing: "pre", splitType: "split", ratio: 10, bonusNew: 1, bonusHeld: 1,
+    investors: kind === "priced" ? [newInvestor()] : [],
   }]);
   // SAFEs hold one investor each; a priced round's size is the sum of its cheques
-  const roundAmount = r => r.kind === "safe" ? (r.amount || 0) : r.investors.reduce((a, x) => a + (x.amount || 0), 0);
+  const roundAmount = r => r.kind === "safe" ? (r.amount || 0) : (r.investors || []).reduce((a, x) => a + (x.amount || 0), 0);
+  const scale = co.unit === "cr" ? 1e7 : 1;
+  const splitCount = rounds.filter(r => r.kind === "split" && splitMultiplier(r) > 0).length;
   const fundedRounds = rounds.filter(r => roundAmount(r) > 0);
+  const chequeCount = fundedRounds.reduce((a, r) => a + (r.kind === "safe" ? 1 : r.investors.filter(x => x.amount > 0).length), 0);
   const fmtW = v => co.unit === "cr" ? `₹${v.toLocaleString("en-IN")} Cr` : `${co.currency}${v.toLocaleString("en-US")}`;
 
   const build = () => {
-    const founders = validTeam.map(t => ({ id: uid(), name: t.name.trim(), shares: Math.round(t.pct * 100000), group: t.group }));
-    const events = rounds.filter(r => roundAmount(r) > 0 && r.val > 0).map(r => r.kind === "safe"
-      ? { id: uid(), kind: "safe", name: r.name || "SAFE", date: r.date, investor: r.investor || "Investor", amount: r.amount, capType: "post", cap: r.val, discount: 0 }
-      : { id: uid(), kind: "priced", name: r.name || "Round", date: r.date, preMoney: r.val, esopTarget: (r.esop || 0) / 100, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 0,
-          investments: r.investors.filter(x => x.amount > 0).map((x, k) => ({ investor: x.name.trim() || `${r.name || "Round"} investor ${k + 1}`, amount: x.amount })),
-          secondaries: [] });
-    const priced = events.filter(e => e.kind === "priced");
-    const lastRound = priced[priced.length - 1];
-    const lastPost = lastRound ? lastRound.preMoney + lastRound.investments.reduce((a, x) => a + x.amount, 0) : 0;
+    const founders = validTeam.map(t => ({ id: uid(), name: t.name.trim(), shares: byShares ? t.shares : Math.round(t.pct * 100000), group: t.group }));
+    const company = { ...co, wholeShares: byShares, faceValue: byShares ? (co.faceValue || 0) : 0 };
+    const events = rounds.filter(r => r.kind === "split" ? byShares && splitMultiplier(r) > 0 : roundAmount(r) > 0 && r.val > 0).map(r =>
+      r.kind === "split"
+        ? { id: uid(), kind: "split", name: r.name || "Share split", date: r.date, splitType: r.splitType, ratio: r.ratio, bonusNew: r.bonusNew, bonusHeld: r.bonusHeld }
+      : r.kind === "safe"
+        ? { id: uid(), kind: "safe", name: r.name || "SAFE", date: r.date, investor: r.investor || "Investor", amount: r.amount, capType: "post", cap: r.val, discount: 0 }
+        : { id: uid(), kind: "priced", name: r.name || "Round", date: r.date,
+            ...(byShares && r.pricing === "price" ? { pricing: "price", pricePerShare: r.val, preMoney: 0 } : { preMoney: r.val }),
+            esopTarget: (r.esop || 0) / 100, esopTiming: "post", prefMultiple: 1, participating: false, revenue: 0,
+            investments: r.investors.filter(x => x.amount > 0).map((x, k) => ({ investor: x.name.trim() || `${r.name || "Round"} investor ${k + 1}`, amount: x.amount })),
+            secondaries: [] });
+    const snaps = computeCapTable({ company, founders, events }).snapshots.filter(sn => sn.postMoney);
+    const lastPost = snaps.length ? snaps[snaps.length - 1].postMoney : 0;
     const isCr = co.unit === "cr";
     const exitVal = exit.value > 0 ? exit.value
       : Math.max(lastPost * 3, (co.revenue || 0) * 10, isCr ? 100 : 20000000);
     onDone({
       isExample: false,
-      company: co, founders, events,
+      company, founders, events,
       exit: { value: Math.round(exitVal), date: exit.date },
       scenarios: {
         rounds: ["Next round", "Round after"],
@@ -1275,8 +1431,19 @@ function SetupWizard({ onDone, onExample, onCancel }) {
         </div>}
 
         {step === 1 && <div>
-          <p className="lede">Enter each person's stake <b>at founding</b> — before any funding round, SAFE or ESOP pool. Don't enter today's diluted percentages: the next step replays each round and works out current stakes for you.</p>
-          <p className="hint">Example: two co-founders who split the company 60/40 on day one enter 60 and 40, even if they own less today. Angels who came in through a SAFE or priced round belong in the next step, not here. Stakes are normalized to 100%.</p>
+          <p className="lede">Enter each person's stake <b>at founding</b> — before any funding round, SAFE or ESOP pool. Don't enter today's diluted {byShares ? "holdings" : "percentages"}: the next step replays each round and works out current stakes for you.</p>
+          <div className="frow" style={{ marginBottom: 10 }}>
+            <div><label className="f">Enter the founding split as</label>
+              <select value={entry} onChange={e => setEntry(e.target.value)}>
+                <option value="pct">Percentages</option>
+                <option value="shares">Share counts (as allotted at incorporation)</option>
+              </select></div>
+            {byShares && <div><label className="f">Face value ({sym} per share)</label>
+              <NumInput value={co.faceValue} onChange={v => setCo({ ...co, faceValue: v })} style={{ width: 90 }} /></div>}
+          </div>
+          {byShares
+            ? <p className="hint">Example: a company incorporated with 10,000 shares of {sym}10 split 6,000 / 4,000 enters exactly that, even if a later split or bonus changed the counts — add those as events in the next step. Shares are kept whole and rounds allot whole shares.</p>
+            : <p className="hint">Example: two co-founders who split the company 60/40 on day one enter 60 and 40, even if they own less today. Angels who came in through a SAFE or priced round belong in the next step, not here. Stakes are normalized to 100%.</p>}
           {team.map((t, i) => (
             <div key={t.id} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
               <input value={t.name} placeholder={t.group === "Angels" ? "Angel name" : "Founder name"}
@@ -1284,27 +1451,60 @@ function SetupWizard({ onDone, onExample, onCancel }) {
               <select value={t.group} onChange={e => setT(i, { group: e.target.value })}>
                 <option value="Founders">Founder</option><option value="Angels">Angel</option>
               </select>
-              <NumInput value={t.pct} onChange={v => setT(i, { pct: v })} style={{ width: 65 }} />
-              <span className="hint" style={{ margin: 0 }}>%</span>
+              {byShares ? <>
+                <NumInput value={t.shares} onChange={v => setT(i, { shares: Math.max(0, Math.floor(v)) })} style={{ width: 110 }} />
+                <span className="hint" style={{ margin: 0 }}>shares{totalShares > 0 && t.shares > 0 ? ` · ${fmtPct(t.shares / totalShares)}` : ""}</span>
+              </> : <>
+                <NumInput value={t.pct} onChange={v => setT(i, { pct: v })} style={{ width: 65 }} />
+                <span className="hint" style={{ margin: 0 }}>%</span>
+              </>}
               <button className="btn sm danger" onClick={() => setTeam(team.filter((_, j) => j !== i))}>×</button>
             </div>
           ))}
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-            <button className="btn sm" onClick={() => setTeam([...team, { id: uid(), name: "", pct: 10, group: "Founders" }])}>+ Add person</button>
-            <span className="hint" style={{ margin: 0 }}>Founding split entered: {totalPct}%{validTeam.length > 0 && totalPct !== 100 ? " — will be scaled to 100%" : ""}</span>
+            <button className="btn sm" onClick={() => setTeam([...team, { id: uid(), name: "", pct: 10, shares: 1000, group: "Founders" }])}>+ Add person</button>
+            {byShares
+              ? <span className="hint" style={{ margin: 0 }}>Issued at founding: {totalShares.toLocaleString("en-IN")} shares{co.faceValue > 0 ? ` · share capital ${sym}${(totalShares * co.faceValue).toLocaleString("en-IN")}` : ""}</span>
+              : <span className="hint" style={{ margin: 0 }}>Founding split entered: {totalPct}%{validTeam.length > 0 && totalPct !== 100 ? " — will be scaled to 100%" : ""}</span>}
           </div>
         </div>}
 
         {step === 2 && <div>
           <p className="lede">Rounds you've already closed, oldest first. Add every investor in a priced round with their cheque — the round size is the total. Skip this if you haven't raised yet; SAFE terms, ESOP timing and secondaries can be refined later.</p>
-          {rounds.map((r, i) => (
+          {rounds.map((r, i) => r.kind === "split" ? (
+            <div key={r.id} style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div><label className="f">Event</label>
+                  <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 110 }} /></div>
+                <div><label className="f">Date</label>
+                  <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
+                <div><label className="f">Type</label>
+                  <select value={r.splitType} onChange={e => setR(i, { splitType: e.target.value })}>
+                    <option value="split">Split</option><option value="bonus">Bonus issue</option>
+                  </select></div>
+                {r.splitType === "bonus" ? <>
+                  <div><label className="f">New shares</label>
+                    <NumInput value={r.bonusNew} onChange={v => setR(i, { bonusNew: v })} style={{ width: 60 }} /></div>
+                  <div><label className="f">Per … held</label>
+                    <NumInput value={r.bonusHeld} onChange={v => setR(i, { bonusHeld: v || 1 })} style={{ width: 60 }} /></div>
+                </> : <div><label className="f">Each share becomes</label>
+                  <NumInput value={r.ratio} onChange={v => setR(i, { ratio: v })} style={{ width: 70 }} /></div>}
+                <button className="btn sm danger" onClick={() => setRounds(rounds.filter((_, j) => j !== i))}>×</button>
+              </div>
+              <p className="hint" style={{ margin: 0 }}>Multiplies every holding by {Math.round(splitMultiplier(r) * 10000) / 10000}; ownership percentages don't change.</p>
+            </div>
+          ) : (
             <div key={r.id} style={{ marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div><label className="f">{r.kind === "safe" ? "SAFE" : "Round"}</label>
                   <input value={r.name} onChange={e => setR(i, { name: e.target.value })} style={{ width: 90 }} /></div>
                 <div><label className="f">Date</label>
                   <input type="date" value={r.date} onChange={e => setR(i, { date: e.target.value })} /></div>
-                <div><label className="f">{r.kind === "safe" ? "Val. cap" : "Pre-money"}</label>
+                {byShares && r.kind === "priced" && <div><label className="f">Priced by</label>
+                  <select value={r.pricing} onChange={e => setR(i, { pricing: e.target.value })}>
+                    <option value="pre">Pre-money</option><option value="price">Price / share</option>
+                  </select></div>}
+                <div><label className="f">{r.kind === "safe" ? "Val. cap" : byShares && r.pricing === "price" ? `Price / share (${sym})` : "Pre-money"}</label>
                   <NumInput value={r.val} onChange={v => setR(i, { val: v })} style={{ width: 90 }} /></div>
                 {r.kind === "safe" ? <>
                   <div><label className="f">Amount</label>
@@ -1328,7 +1528,10 @@ function SetupWizard({ onDone, onExample, onCancel }) {
                   ))}
                   <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
                     <button className="btn sm" onClick={() => setR(i, { investors: [...r.investors, newInvestor()] })}>+ Add investor</button>
-                    <span className="hint" style={{ margin: 0 }}>Round size: {roundAmount(r) > 0 ? fmtW(roundAmount(r)) : "—"}{r.val > 0 && roundAmount(r) > 0 ? ` · post-money ${fmtW(r.val + roundAmount(r))}` : ""}</span>
+                    <span className="hint" style={{ margin: 0 }}>Round size: {roundAmount(r) > 0 ? fmtW(roundAmount(r)) : "—"}
+                      {r.val > 0 && roundAmount(r) > 0 ? (byShares && r.pricing === "price"
+                        ? ` · ≈ ${r.investors.reduce((a, x) => a + Math.floor((x.amount || 0) * scale / r.val + 1e-9), 0).toLocaleString("en-IN")} new shares at ${sym}${r.val.toLocaleString("en-IN")}`
+                        : ` · post-money ${fmtW(r.val + roundAmount(r))}`) : ""}</span>
                   </div>
                 </div>}
             </div>
@@ -1336,6 +1539,7 @@ function SetupWizard({ onDone, onExample, onCancel }) {
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button className="btn sm" onClick={() => addRound("priced")}>+ Priced round</button>
             <button className="btn sm" onClick={() => addRound("safe")}>+ SAFE / note</button>
+            {byShares && <button className="btn sm" onClick={() => addRound("split")}>+ Split / bonus</button>}
           </div>
         </div>}
 
@@ -1348,7 +1552,7 @@ function SetupWizard({ onDone, onExample, onCancel }) {
               <input type="date" value={exit.date} onChange={e => setExit({ ...exit, date: e.target.value })} /></div>
           </div>
           <p className="hint" style={{ marginTop: 14 }}>
-            Building for <b>{co.name || "your company"}</b> · {co.sector} · {co.stage} · {validTeam.length} founding shareholder{validTeam.length === 1 ? "" : "s"} · {fundedRounds.length} round{fundedRounds.length === 1 ? "" : "s"}, {fundedRounds.reduce((a, r) => a + (r.kind === "safe" ? 1 : r.investors.filter(x => x.amount > 0).length), 0)} investor cheques.
+            Building for <b>{co.name || "your company"}</b> · {co.sector} · {co.stage} · {validTeam.length} founding shareholder{validTeam.length === 1 ? "" : "s"} · {fundedRounds.length} round{fundedRounds.length === 1 ? "" : "s"}, {chequeCount} investor cheque{chequeCount === 1 ? "" : "s"}{byShares ? ` · ${totalShares.toLocaleString("en-IN")} founding shares${splitCount ? `, ${splitCount} split/bonus event${splitCount === 1 ? "" : "s"}` : ""}` : ""}.
           </p>
         </div>}
 
@@ -1388,6 +1592,7 @@ function App() {
   });
   const [mode, setMode] = useState(IS_DEMO || HAD_DRAFT ? "dash" : "wizard");
   const [tab, setTab] = useState(TAB_IDS.includes(TAB_PARAM) ? TAB_PARAM : "captable");
+  const [basis, setBasis] = useState("fd"); // cap table view: "fd" fully diluted | "issued"
   const [toast, setToast] = useState(null);
   const [caps, setCaps] = useState({ artifact: undefined, downloads: undefined });
   const bootRef = useRef(false);
@@ -1457,24 +1662,28 @@ function App() {
   const plannedRaise = state.company.plannedRaise != null ? state.company.plannedRaise : (stageRow ? stageRow.round[1] : 0);
   const setCompany = patch => setState(s => ({ ...s, company: { ...s.company, ...patch } }));
 
-  // Round economics
+  // Round economics (from the engine, so price-per-share rounds and whole-share rounding carry through)
   const roundEcon = useMemo(() => {
-    const priced = sortedEvents(state).filter(e => e.kind === "priced");
     let prevPost = null;
-    return priced.map(ev => {
-      const raise = (ev.investments || []).reduce((a, i) => a + (i.amount || 0), 0);
-      const post = (ev.preMoney || 0) + raise;
+    return cap.rounds.map(r => {
+      const ev = state.events.find(e => e.id === r.eventId) || {};
+      const post = r.preMoney + r.raise;
       const row = {
-        name: ev.name, date: ev.date, pre: ev.preMoney, raise, post,
-        dilution: post > 0 ? raise / post : null,
-        markup: prevPost > 0 ? ev.preMoney / prevPost : null,
+        name: r.name, date: r.date, pre: r.preMoney, raise: r.raise, post,
+        price: r.price, newShares: r.newShares,
+        dilution: post > 0 ? r.raise / post : null,
+        markup: prevPost > 0 ? r.preMoney / prevPost : null,
         revenue: ev.revenue || null,
-        pr: ev.revenue > 0 ? ev.preMoney / ev.revenue : null,
+        pr: ev.revenue > 0 ? r.preMoney / ev.revenue : null,
       };
       prevPost = post;
       return row;
     });
-  }, [state]);
+  }, [cap, state.events]);
+  const roundInfo = Object.fromEntries(cap.rounds.map(r => [r.eventId, r]));
+  const lastRound = cap.rounds[cap.rounds.length - 1];
+  const regPos = basis === "fd" ? allPos : cap.positions;
+  const regTotal = basis === "fd" ? FD : cap.issuedShares;
 
   // Returns per holder with capital in or out
   const investors = useMemo(() => {
@@ -1519,12 +1728,13 @@ function App() {
 
   const exportCSV = async () => {
     const u = unitLabel();
-    const lines = [["Holder", "Group", "Class", "Shares", "Fully diluted %", `Invested (${u})`, `Realized (${u})`, `Proceeds at exit (${u})`].join(",")];
+    const lines = [["Holder", "Group", "Class", "Shares", "Issued %", "Fully diluted %", `Invested (${u})`, `Realized (${u})`, `Proceeds at exit (${u})`].join(",")];
     allPos.filter(p => p.shares > 0.5 || p.invested > 0).forEach(p => {
       const w = wf.rows.filter(r => r.holder === p.holder).reduce((a, r) => a + r.proceeds, 0);
       const realized = cap.realized.filter(r => r.holder === p.holder).reduce((a, r) => a + r.amount, 0);
-      lines.push([`"${p.holder}"`, `"${p.group}"`, p.kind, Math.round(p.shares),
-        (p.shares / FD * 100).toFixed(2) + "%", p.invested || 0, realized, Math.round(w * 100) / 100].join(","));
+      const issuedPct = p.group === "ESOP" || !(cap.issuedShares > 0) ? "" : (p.shares / cap.issuedShares * 100).toFixed(2) + "%";
+      lines.push([`"${p.holder}"`, `"${p.group}"`, p.kind, state.company.wholeShares ? Math.round(p.shares) : Math.round(p.shares * 100) / 100,
+        issuedPct, (p.shares / FD * 100).toFixed(2) + "%", p.invested || 0, realized, Math.round(w * 100) / 100].join(","));
     });
     const csv = lines.join("\n");
     const filename = `${(state.company.name || "captable").replace(/\s+/g, "-")}-captable.csv`;
@@ -1558,6 +1768,12 @@ function App() {
       preMoney: MONEY.unit === "cr" ? 100 : 20000000, esopTarget: 0, esopTiming: "post",
       prefMultiple: 1, participating: false, revenue: 0,
       investments: [{ investor: "", amount: MONEY.unit === "cr" ? 25 : 4000000 }], secondaries: [],
+    }]
+  }));
+  const addSplit = () => setState(s => ({
+    ...s, events: [...s.events, {
+      id: uid(), kind: "split", name: "Share split", date: new Date().toISOString().slice(0, 10),
+      splitType: "split", ratio: 10, bonusNew: 1, bonusHeld: 1,
     }]
   }));
 
@@ -1645,10 +1861,37 @@ function App() {
       {tab === "captable" && (
         <section>
           <h2 className="section serif">Who owns {state.company.name} today</h2>
-          <p className="section-note">Fully diluted view — every issued share, converted instrument, and the full option pool.</p>
-          <div className="panel">
-            <p className="chart-title">Fully diluted ownership</p>
-            <OwnershipBar cap={cap} />
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }} role="radiogroup" aria-label="Ownership basis">
+            {[["fd", "Fully diluted"], ["issued", "Issued shares"]].map(([id, label]) => (
+              <button key={id} role="radio" aria-checked={basis === id} className={"btn sm" + (basis === id ? " primary" : "")} onClick={() => setBasis(id)}>{label}</button>
+            ))}
+            <span className="section-note" style={{ margin: 0 }}>
+              {basis === "fd"
+                ? "Every issued share, converted instrument, and the full option pool."
+                : "Only shares actually allotted — the option pool is reserved, not issued. Use this for filings and board resolutions."}
+            </span>
+          </div>
+          <div className="grid2">
+            <div className="panel">
+              <p className="chart-title">{basis === "fd" ? "Fully diluted ownership" : "Ownership of issued shares"}</p>
+              <OwnershipBar cap={cap} includePool={basis === "fd"} />
+            </div>
+            <div className="panel">
+              <p className="chart-title">Shares</p>
+              <div className="twrap"><table><tbody>
+                <tr><td>Issued &amp; paid-up</td><td className="num">{fmtShares(cap.issuedShares)}</td></tr>
+                <tr><td>Option pool (reserved, not issued)</td><td className="num">{fmtShares(cap.esopShares)}</td></tr>
+                <tr className="total"><td>Fully diluted</td><td className="num">{fmtShares(FD)}</td></tr>
+                {lastRound && <tr><td>Last price per share ({lastRound.name})</td><td className="num">{fmtAbs(lastRound.price)}</td></tr>}
+                {cap.faceValue > 0 && <>
+                  <tr><td>Face value</td><td className="num">{fmtFace(cap.faceValue)}</td></tr>
+                  <tr><td>Share capital (issued × face value)</td><td className="num">{fmtAbs(cap.shareCapital)}</td></tr>
+                  <tr><td>Securities premium received</td><td className="num">{fmtMoney(cap.premium)}</td></tr>
+                </>}
+              </tbody></table></div>
+              {!(cap.faceValue > 0) && <p className="hint">Add a face value on the Rounds tab to see share capital and securities premium.</p>}
+              {!state.company.wholeShares && <p className="hint">Share counts are exact (fractional). Switch to whole shares on the Rounds tab to allot like a real register.</p>}
+            </div>
           </div>
           <div className="panel">
             <p className="chart-title">The dilution story</p>
@@ -1661,23 +1904,23 @@ function App() {
               <table>
                 <thead><tr>
                   <th>Holder</th><th>Group</th><th>Class</th>
-                  <th className="num">Shares</th><th className="num">FD %</th>
+                  <th className="num">Shares</th><th className="num">{basis === "fd" ? "FD %" : "Issued %"}</th>
                   <th className="num">Invested</th>
                 </tr></thead>
                 <tbody>
-                  {allPos.filter(p => p.shares > 0.5).map((p, i) => (
+                  {regPos.filter(p => p.shares > 0.5).map((p, i) => (
                     <tr key={i}>
                       <td><span className="swatch" style={{ background: slotColor(cap.groups, p.group) }}></span>{p.holder}{p.secondary ? <span className="pill" style={{ marginLeft: 6 }}>secondary</span> : null}</td>
                       <td><span className="pill">{p.group}</span></td>
                       <td>{p.kind === "common" ? "Common" : `Preferred${p.participating ? " (part.)" : ""}`}</td>
                       <td className="num">{fmtShares(p.shares)}</td>
-                      <td className="num">{fmtPct(p.shares / FD)}</td>
+                      <td className="num">{fmtPct(p.shares / regTotal)}</td>
                       <td className="num">{p.invested ? fmtMoney(p.invested) : "—"}</td>
                     </tr>
                   ))}
                   <tr className="total">
-                    <td colSpan="3">Total</td>
-                    <td className="num">{fmtShares(FD)}</td>
+                    <td colSpan="3">Total {basis === "fd" ? "(fully diluted)" : "(issued)"}</td>
+                    <td className="num">{fmtShares(regTotal)}</td>
                     <td className="num">100.0%</td>
                     <td className="num" title="Primary capital raised; secondary purchases excluded">{fmtMoney(primaryRaised)}</td>
                   </tr>
@@ -1685,7 +1928,7 @@ function App() {
               </table>
             </div>
           </div>
-          <p className="footnote">Conventions: dilution = round size ÷ post-money; ESOP top-ups can be created post-round (diluting everyone, your spreadsheet's convention) or pre-money (diluting only existing holders, the US term-sheet default); SAFEs convert at the next priced round; secondaries transfer existing shares at the round's price per share.</p>
+          <p className="footnote">Conventions: dilution = round size ÷ post-money; ESOP top-ups can be created post-round (diluting everyone, your spreadsheet's convention) or pre-money (diluting only existing holders, the US term-sheet default); SAFEs convert at the next priced round; secondaries transfer existing shares at the round's price per share; splits and bonus issues multiply every holding and the pool.</p>
         </section>
       )}
 
@@ -1719,6 +1962,13 @@ function App() {
                 <NumInput value={state.company.revenue} onChange={v => setState(s => ({ ...s, company: { ...s.company, revenue: v } }))} style={{ width: 110 }} /></div>
               <div><label className="f">EBITDA ({unitLabel()})</label>
                 <NumInput value={state.company.ebitda} onChange={v => setState(s => ({ ...s, company: { ...s.company, ebitda: v } }))} style={{ width: 110 }} /></div>
+              <div><label className="f">Face value ({MONEY.sym}/share, at founding)</label>
+                <NumInput value={state.company.faceValue || 0} onChange={v => setCompany({ faceValue: v })} style={{ width: 90 }} /></div>
+              <div><label className="f">Share counts</label>
+                <select value={state.company.wholeShares ? "whole" : "exact"} onChange={e => setCompany({ wholeShares: e.target.value === "whole" })}>
+                  <option value="exact">Exact (fractional)</option>
+                  <option value="whole">Whole shares</option>
+                </select></div>
             </div>
           </div>
 
@@ -1747,21 +1997,27 @@ function App() {
           {sortedEvents(state).map(ev =>
             ev.kind === "safe"
               ? <SafeEditor key={ev.id} ev={ev} onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
-              : <PricedEditor key={ev.id} ev={ev} holderNames={holderNames} onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
+              : ev.kind === "split"
+                ? <SplitEditor key={ev.id} ev={ev} onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
+                : <PricedEditor key={ev.id} ev={ev} holderNames={holderNames} info={roundInfo[ev.id]}
+                    allotted={cap.positions.filter(p => p.eventId === ev.id && !p.secondary).reduce((m, p) => ({ ...m, [p.holder]: (m[p.holder] || 0) + p.shares }), {})}
+                    onChange={n => setEvent(ev.id, n)} onDelete={() => delEvent(ev.id)} />
           )}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <button className="btn" onClick={addSafe}>+ SAFE / note</button>
             <button className="btn" onClick={addPriced}>+ Priced round</button>
+            <button className="btn" onClick={addSplit}>+ Split / bonus issue</button>
           </div>
 
           <div className="panel" style={{ marginTop: 16 }}>
             <h3>Round economics</h3>
-            <p className="hint">Step-up = this round's pre-money over the previous post-money. P/R = pre-money over revenue at the round.</p>
+            <p className="hint">Step-up = this round's pre-money over the previous post-money. P/R = pre-money over revenue at the round. Price per share is after any earlier splits or bonus issues.</p>
             <div className="twrap">
               <table>
                 <thead><tr>
                   <th>Round</th><th>Date</th>
+                  <th className="num">Price / share</th><th className="num">New shares</th>
                   <th className="num">Pre-money</th><th className="num">Raise</th><th className="num">Post-money</th>
                   <th className="num">Dilution</th><th className="num">Step-up</th>
                   <th className="num">Revenue</th><th className="num">P/R</th>
@@ -1770,6 +2026,8 @@ function App() {
                   {roundEcon.map((r, i) => (
                     <tr key={i}>
                       <td>{r.name}</td><td>{r.date}</td>
+                      <td className="num">{fmtAbs(r.price)}</td>
+                      <td className="num">{fmtShares(r.newShares)}</td>
                       <td className="num">{fmtMoney(r.pre)}</td>
                       <td className="num">{fmtMoney(r.raise)}</td>
                       <td className="num">{fmtMoney(r.post)}</td>

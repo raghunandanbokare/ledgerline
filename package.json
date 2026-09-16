@@ -3,7 +3,7 @@
   "private": true,
   "description": "Cap table, exit waterfall, returns and India valuation benchmarks — single-page app served from index.html",
   "scripts": {
-    "test": "node tests/engine.test.js && node tests/render.test.js && node tests/wizard.test.js",
+    "test": "node tests/engine.test.js && node tests/render.test.js && node tests/wizard.test.js && node tests/shares.test.js",
     "test:engine": "node tests/engine.test.js",
     "serve": "python -m http.server 8642"
   },
