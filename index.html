@@ -311,7 +311,7 @@ const SEED = {
 ================================================================ */
 const STAGES = ["Pre-seed", "Seed", "Series A", "Series B", "Series C+"];
 // Bumped by the weekly benchmark-refresh agent every Monday — keep the YYYY-MM-DD format.
-const BENCHMARKS_UPDATED = "2026-09-21";
+const BENCHMARKS_UPDATED = "2026-11-09";
 
 const INDIA_SECTORS = {
   "Fintech (India)": {
@@ -324,7 +324,7 @@ const INDIA_SECTORS = {
       "Series B": { round: [120, 200, 350], post: [550, 1000, 1700], mult: [6, 10, 15] },
       "Series C+": { round: [250, 400, 700], post: [1300, 2500, 5000], mult: [4, 7, 10] },
     },
-    comps: [["PB Fintech (Policybazaar)", "~10–11x rev"], ["Paytm", "~11x rev"], ["Zaggle", "~1x rev"], ["MobiKwik", "~1x rev"]],
+    comps: [["PB Fintech (Policybazaar)", "~5.4x rev"], ["Paytm", "~10x rev"], ["Zaggle", "~0.9x rev"], ["MobiKwik", "~1x rev"]],
     deals: [
       ["PhonePe / Walmart-led round", "2023", "$12B pre-money"],
       ["Juspay Series D follow-on / WestBridge", "2026", "$50M @ ~$1.2B"],
@@ -341,7 +341,7 @@ const INDIA_SECTORS = {
       "Series B": { round: [80, 160, 280], post: [450, 800, 1400], mult: [8, 12, 18] },
       "Series C+": { round: [160, 300, 550], post: [1000, 2000, 4000], mult: [6, 9, 14] },
     },
-    comps: [["Freshworks", "~3x rev"], ["Newgen Software", "~3.5–4x rev"], ["RateGain", "~4.5–5x rev"], ["Zoho", "private, profitable — no quoted multiple"]],
+    comps: [["Freshworks", "~2.7x rev"], ["Newgen Software", "~3.2x rev"], ["RateGain", "~3.2x rev"], ["Zoho", "private, profitable — no quoted multiple"]],
     deals: [
       ["Whatfix Series E", "2024", "$125M @ ~$900M"],
       ["LeadSquared unicorn round", "2022", "~$1B, ~20x ARR (peak-cycle marker)"],
@@ -358,27 +358,29 @@ const INDIA_SECTORS = {
       "Series B": { round: [70, 130, 220], post: [400, 700, 1200], mult: [2, 3, 5] },
       "Series C+": { round: [130, 250, 450], post: [900, 1800, 3000], mult: [1.5, 2.5, 4] },
     },
-    comps: [["Nykaa", "~9x rev"], ["Vedant Fashions (Manyavar)", "~9x rev (profitable premium)"], ["Honasa (Mamaearth)", "~6x rev"], ["FirstCry", "~1x rev"]],
+    comps: [["Nykaa", "~9x rev"], ["Vedant Fashions (Manyavar)", "~8x rev (profitable premium)"], ["Honasa (Mamaearth)", "~5.4x rev"], ["FirstCry", "~1x rev"]],
     deals: [
       ["Minimalist / HUL", "2025", "~₹2,955 Cr, ~6x rev"],
-      ["Dermatouch / Wipro Consumer Care", "2026", "60% stake, ₹387.5 Cr EV"],
+      ["Yoga Bar / ITC (remaining 52.5%)", "2026", "₹645 Cr, ~₹1,229 Cr for 100%, ~2.7x FY26 rev"],
+      ["DailyObjects Series C", "2026", "₹332 Cr @ ~₹1,050 Cr, ~4.6–5.3x FY26 rev (unaudited)"],
       ["SUGAR Cosmetics / A91", "2026", "₹144.5 Cr @ ₹755 Cr post, ~1.9x FY25 rev (down ~75% from peak)"],
     ],
   },
   "Consumer internet & marketplaces (India)": {
     basis: "EV / net revenue",
-    note: "Priced on net revenue and take rate, never GMV; liquidity and purchase frequency drive the premium — quick commerce currently trades at the very top of every band.",
+    note: "Priced on net revenue and take rate, never GMV; liquidity and purchase frequency drive the premium. Quick commerce has de-rated hard (Swiggy ~1.7x, Zepto's shelved-IPO marks ~1.1–1.3x) and now sits near the bottom of the late-stage band.",
     stages: {
       "Pre-seed": { round: [2, 4, 9], post: [12, 28, 50], mult: null },
       "Seed": { round: [8, 16, 35], post: [40, 90, 180], mult: [8, 15, 25] },
       "Series A": { round: [40, 85, 160], post: [200, 350, 650], mult: [6, 10, 18] },
       "Series B": { round: [120, 250, 450], post: [600, 1200, 2200], mult: [4, 8, 12] },
-      "Series C+": { round: [300, 550, 1000], post: [1500, 3000, 6000], mult: [2.5, 4.5, 8] },
+      "Series C+": { round: [300, 550, 1000], post: [1500, 3000, 6000], mult: [1.5, 4, 8] },
     },
-    comps: [["Eternal (Zomato + Blinkit)", "~4x rev (gross, inventory-led Blinkit)"], ["IndiaMART", "~4x rev"], ["ixigo", "~5x rev"], ["Swiggy", "~2.5x rev"]],
+    comps: [["Eternal (Zomato + Blinkit)", "~4.3x rev (gross, inventory-led Blinkit)"], ["IndiaMART", "~3.8x rev"], ["ixigo", "~4.8x rev"], ["Swiggy", "~1.7x rev"]],
     deals: [
       ["Zepto pre-IPO round", "2026", "~₹1,000 Cr @ ~$4.5B (down from $7B)"],
-      ["Rapido Series E", "2024", "$1.1B unicorn"],
+      ["Zetwerk IPO", "2026", "₹25,583 Cr @ upper band, ~1.6x FY26 rev"],
+      ["AceVector (Snapdeal + Unicommerce) IPO", "2026", "₹1,741 Cr, ~3.4x FY26 rev; listed ~11% below issue"],
       ["Unacademy / upGrad", "2026", "₹1,955 Cr all-stock, ~4.9x rev (~2.6x ex-cash), down ~94% from peak"],
     ],
   },
@@ -394,34 +396,34 @@ const INDIA_SECTORS = {
       "Seed": { round: [5, 15, 30], post: [30, 70, 150], mult: { pb: [1.5, 2.5, 4], pAum: [0.5, 1.5, 3] } },
       "Series A": { round: [40, 90, 160], post: [200, 400, 800], mult: { pb: [1.2, 2, 3.5], pAum: [0.4, 0.8, 1.5] } },
       "Series B": { round: [100, 250, 700], post: [600, 1500, 3500], mult: { pb: [1.3, 2.3, 4], pAum: [0.4, 0.9, 1.8] } },
-      "Series C+": { round: [250, 1000, 2800], post: [3000, 9000, 25000], mult: { pb: [1.3, 2.5, 5], pAum: [0.4, 1, 2.8] } },
+      "Series C+": { round: [250, 1000, 2800], post: [3000, 9000, 25000], mult: { pb: [1.3, 2.5, 5], pAum: [0.3, 0.8, 2.8] } },
     },
-    comps: [["Bajaj Finance", "~5.6x P/B · ~1.2x AUM"], ["Cholamandalam", "~5x P/B · ~0.6x AUM"], ["Shriram Finance", "~2.9x P/B · ~0.8x AUM"], ["Five-Star Business Finance", "~2.1x P/B · ~1.1x AUM"], ["Home First", "~3x P/B · ~0.8x AUM"]],
+    comps: [["Bajaj Finance", "~5.4x P/B · ~1.1x AUM"], ["Cholamandalam", "~4.4x P/B · ~0.6x AUM"], ["Shriram Finance", "~2x P/B · ~0.7x AUM"], ["Five-Star Business Finance", "~1.6x P/B · ~0.9x AUM"], ["Home First", "~2.5x P/B · ~0.6x AUM"]],
     deals: [
       ["KreditBee Series E", "2026", "$280M @ $1.5B, ~1x AUM"],
       ["OnEMI (Kissht) IPO → preferential issue", "2026", "IPO ₹2,881 Cr post (~1.4x post-money book); Sep ₹832 Cr pref. @ ₹314/sh, ~0.8x AUM at market"],
+      ["Moneyview IPO", "2026", "₹5,985 Cr @ upper band, ~2.7x pre-issue book (~2x post-money), ~0.27x AUM; listed +64% (~0.43x AUM)"],
       ["Profectus / Ugro Capital", "2025", "₹1,400 Cr for 100%, ~1.2x book"],
-      ["DMI Finance / MUFG", "2024", "~$3B, ~2.6x post-money book"],
     ],
   },
   "Small finance & digital banks (India)": {
     metrics: [
       { key: "pb", label: "P / Book", driver: "bookValue", onBook: true },
     ],
-    note: "A small finance bank licence needs ₹200 Cr minimum paid-up capital, so there is no seed-stage entry. Priced on P/B against listed SFBs (median ~1.1x) and large private banks (~1.8–2.3x); deposit franchise, CASA share and asset quality move the multiple.",
+    note: "A small finance bank licence needs ₹200 Cr minimum paid-up capital, so there is no seed-stage entry. Priced on P/B against listed SFBs (median ~1.3x; Equitas and Jana now below book) and large private banks (~1.8–2.3x); deposit franchise, CASA share and asset quality move the multiple.",
     compsNote: "Listed Indian banks — price / book value",
     stages: {
       "Pre-seed": null,
       "Seed": null,
       "Series A": { round: [100, 200, 400], post: [500, 1000, 2000], mult: { pb: [0.9, 1.4, 2.5] } },
-      "Series B": { round: [150, 400, 1000], post: [1000, 2500, 5000], mult: { pb: [1, 1.8, 3] } },
-      "Series C+": { round: [300, 950, 2000], post: [2000, 4300, 9000], mult: { pb: [1, 2, 4] } },
+      "Series B": { round: [150, 400, 1000], post: [1000, 2500, 5000], mult: { pb: [0.9, 1.8, 3] } },
+      "Series C+": { round: [300, 950, 2000], post: [2000, 4300, 9000], mult: { pb: [0.9, 2, 4] } },
     },
-    comps: [["AU Small Finance Bank", "~3.9x P/B"], ["Ujjivan SFB", "~1.8x P/B"], ["Equitas SFB", "~1.4x P/B"], ["Jana SFB", "~1.3x P/B"], ["HDFC Bank (anchor)", "~1.9x P/B"]],
+    comps: [["AU Small Finance Bank", "~3.2x P/B"], ["Ujjivan SFB", "~1.6x P/B"], ["Equitas SFB", "~1x P/B"], ["Jana SFB", "~0.9x P/B"], ["HDFC Bank (anchor)", "~1.9x P/B"]],
     deals: [
       ["slice Small Finance Bank", "2026", "$100M @ ~$450M (down ~68%), ~2.4x post-money book"],
       ["Unity SFB stake sale (sought)", "2025", "$800–900M ask, ~3.8x book — not closed"],
-      ["AU SFB / Fincare SFB merger", "2024", "all-share, ~₹4,416 Cr"],
+      ["IDBI Bank / Fairfax (60.72%)", "2026", "₹52,878 Cr @ ₹81/sh, ~1.56x book (RBI approval pending)"],
     ],
   },
 };
